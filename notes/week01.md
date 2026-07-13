@@ -1,5 +1,5 @@
 # Week 1 Notes — DC Theory Foundations
-**Source:** All About Circuits, Vol. I — Ch. 1 (Basic Concepts of Electricity), Ch. 2 (Ohm's Law), Ch. 3 (Electrical Safety), Ch. 4 (Scientific Notation & Metric Prefixes), Ch. 5 (Series & Parallel Circuits), Ch. 6 (Divider Circuits & Kirchhoff's Laws)
+**Source:** All About Circuits, Vol. I — Ch. 1 (Basic Concepts of Electricity), Ch. 2 (Ohm's Law), Ch. 3 (Electrical Safety), Ch. 4 (Scientific Notation & Metric Prefixes), Ch. 5 (Series & Parallel Circuits), Ch. 6 (Divider Circuits & Kirchhoff's Laws), Ch. 7 (Series-Parallel Combination Circuits)
 **Habit:** every worked example gets rebuilt in Falstad. Hover wires for current, nodes for voltage, check against hand math.
 
 ---
@@ -390,6 +390,7 @@ Parallel example (9 V, 90/45/180 Ω):
 - **Branch shorts** → theoretically infinite current (I = E/0). Reality: every real source has **internal resistance**, which suddenly dominates — nearly all the voltage drops *inside the source*, every branch voltage **collapses**, and things get hot. The "simple parallel circuit" was secretly series-parallel all along.
 - Never deliberately short a source — even if nothing nearby gets hurt, the source likely will.
 - Field statistic worth remembering: **resistors fail open far more often than shorted**, and almost never unless physically/electrically overstressed.
+- This section only handles pure-series and pure-parallel faults; **§7.4** scales the same reasoning to combination circuits using symbolic {↑, ↓, same} tables.
 
 ### 5.8 Building circuits — the fabrication menu
 
@@ -458,6 +459,170 @@ Worked example: 6 V across 1k ∥ 3k ∥ 2k (R_T = 545.45 Ω): branch currents *
 
 ---
 
+## Chapter 7 — Series-Parallel Combination Circuits
+
+*The payoff chapter. Real circuits are almost never purely series or purely parallel — a pull-up + button + GPIO pin, a divider feeding an ADC, an LED bank off one rail: all hybrids. This chapter is the general algorithm for taming any resistive circuit, and it's secretly a chapter about recursion.*
+
+### 7.1 What a series-parallel circuit is — and why the Ch. 5 rules stop applying globally
+
+- **Series-parallel** = a circuit that is series in some places and parallel in others. Diagnostic: more than one current path (→ not series), *and* more than two sets of electrically common points (→ not parallel).
+- **The reference circuit for the whole chapter:** 24 V source driving (R1 = 100 Ω ∥ R2 = 250 Ω) in series with (R3 = 350 Ω ∥ R4 = 200 Ω). Current leaves the battery, splits through R3/R4, rejoins, splits again through R1/R2, rejoins home.
+- ⚠️ **No rule applies "across the table" anymore.** You can't sum all four R's (they're not all in series) and can't reciprocal-sum them (not all in parallel). The six Ch. 5 rules still hold — but only **locally**, inside each pure-series or pure-parallel subsection. The new skill is *scoping*: knowing which rule is legal where.
+- CS anchor: the series/parallel rules just became **block-scoped variables** — perfectly valid inside their cluster, meaningless at global scope.
+- Ohm's Law is unaffected: it never cared about topology, only about one component's (or one equivalent's) own E/I/R — vertical columns in the table, exactly as before.
+
+### 7.2 The analysis algorithm — reduce, solve, expand
+
+The book lists 8 steps; they compress to three phases:
+
+1. **REDUCE** — find any pure-series or pure-parallel cluster, replace it with a single equivalent resistor, re-draw (and give the equivalent its own table column). Repeat until one resistor remains.
+2. **SOLVE** — I_T = E_T / R_T on that final resistor.
+3. **EXPAND** — un-collapse one reduction at a time, pushing knowns back down: a **series equivalent hands its current to its members** (series: same I), a **parallel equivalent hands its voltage to its members** (parallel: same E). Ohm's Law fills in the missing partner at every level. Finish with P = I·E per component.
+
+- **Notation to adopt (the book's own):** `R1//R2` = R1 in parallel with R2; `R1--R2` = in series. The reference circuit collapses to **R_T = (R1//R2)--(R3//R4)**.
+- CS anchor — that expression is an **AST**. `//` and `--` are binary operators over resistances. **Reduce = post-order evaluation** of the tree (children first, bottom-up). **Expand = walking back down**, distributing values by node type: at a `--` node, copy I to both children; at a `//` node, copy E to both children. The extra table columns (R1//R2, R3//R4) are literally the stack frames. Divide-and-conquer, nothing more.
+
+**Worked — the reference circuit (rebuild in Falstad, verify every cell):**
+
+| stage | operation | result |
+|---|---|---|
+| reduce | R1//R2 = (100·250)/(100+250) | **71.429 Ω** |
+| reduce | R3//R4 = (350·200)/(350+200) | **127.27 Ω** |
+| reduce | R_T = 71.429 + 127.27 (series) | **198.70 Ω** |
+| solve | I_T = 24 / 198.70 | **120.78 mA** |
+| expand (series step) | both equivalents carry I_T → E = I·R | E(R1//R2) = **8.6275 V**, E(R3//R4) = **15.373 V** |
+| expand (parallel step) | members inherit their equivalent's voltage → I = E/R | I₁ = **86.28 mA**, I₂ = **34.51 mA**, I₃ = **43.92 mA**, I₄ = **76.86 mA** |
+
+- **Free built-in checks — run them every time:** KVL: 8.6275 + 15.373 = 24 ✓. KCL: 86.28 m + 34.51 m ≈ 120.78 mA ✓ and 43.92 m + 76.86 m = 120.78 mA ✓. If either fails, a mistake exists, guaranteed (§5.5's power-sum check works too).
+- The chapter cross-verifies with SPICE, inserting **0 V "dummy" sources** in series with each resistor — SPICE can only report current *through voltage sources*, so zero-volt sources act as free ammeters. (Falstad's hover spares you the trick, but you'll meet it again in ngspice/LTspice netlists.)
+- ⚠️ Don't be intimidated by "71.429 Ω": that precision is pedagogy, not practice. Real parts are ±5% or ±1% (see the playbook below) — carry 3–4 sig figs through the math and remember the components are fuzzier than your arithmetic (§4.1's precision lesson).
+
+### 7.3 Re-drawing convoluted schematics — normalizing the graph
+
+Real schematics (and sketches traced off physical boards) don't arrive pre-organized. The fix is a mechanical **re-drawing algorithm**:
+
+1. Trace one loop from battery − terminal around to +, following the components nearest the battery, ignoring everything else. **Mark voltage-drop polarity on each resistor as you pass** (electron flow: enters −, exits +).
+2. Draw that loop as a clean vertical schematic.
+3. Find a loop that wraps *around* an already-traced component; trace it, mark polarities (they'll mirror the component it parallels), add it to the vertical drawing alongside its partner.
+4. Repeat step 3 until every component is placed.
+
+- Why this is legal: **wire length and routing don't matter — only connection topology does** (§2.7's electrically-common idea doing the heavy lifting). Stretch, shrink, bend at will; the circuit is unchanged.
+- CS anchor: a circuit is a **graph**, and any particular schematic is just one drawing (embedding) of that graph. Re-drawing = a behavior-preserving refactor into canonical, readable form. An ugly schematic is spaghetti code: identical semantics, hostile layout.
+- The chapter's 7-resistor monster, once re-drawn, reduces mechanically right-to-left: R2//R3 → (--R4) → (//R5) → (--R7) → (//R6) → (--R1) = R_T. Each step is one AST node collapsing.
+- The polarity marks aren't busywork: they're the correctness guide when placing paralleled components (+ joins +, − joins −), and they're KVL sign discipline (§6.2) getting drilled early.
+
+### 7.4 Component failure analysis — qualitative reasoning at full scale
+
+> Dirac: "I understand an equation when I can predict the properties of its solutions without actually solving it." The circuit version: predicting a fault's effects with **zero arithmetic**.
+
+- Method: run the exact same table algorithm, but over **symbols {↑, ↓, same} instead of numbers**. Fill in givens first (the failed part gets an arrow — shorted = R↓, open = R↑ — everything else "same"), then propagate: Ohm's Law vertically, series/parallel rules horizontally. Same machine, abstract inputs.
+- CS anchor: this is **sign/monotonicity analysis** — evaluating the program over the abstract domain {↑, ↓, same} instead of concrete values (the textbook first example of abstract interpretation). Faster than arithmetic, and immune to keystroke errors.
+- Worked scenario (R2 fails **shorted** in the reference circuit): R2↓ → R1//R2 ↓ → R_T ↓ (single-component rule, below) → I_T ↑ (I = E/R, E same, R↓) → that current flows through both series sections → E across R3//R4 ↑ (E = IR, R same, I↑) → E across R1//R2 ↓ (KVL: the two drops still sum to a fixed 24 V) → parallel members inherit their section's arrow → branch currents by I = E/R where decidable...
+- ⚠️ **The two-moving-inputs trap:** when *both* inputs of an Ohm's-Law equation carry arrows in conflicting directions (R1//R2 has R↓ *and* I↑ — does E go up or down?), **Ohm's Law is undecidable** — the answer depends on magnitudes you deliberately don't have. Switch tools: some horizontal rule can always break the tie. Here, KVL decides E(R1//R2)↓ (the other drop rose, total is fixed). Later, I through R2 (E↓ *and* R↓, ambiguous) is decided by KCL (section current ↑ while I through R1 ↓ ⇒ I through R2 must be ↑). **Knowing which rule is decidable is the actual skill.**
+- **The three fault rules to memorize:**
+  1. A single failed component moves **total resistance in the same direction** as its own change. (Magnitude differs; direction always matches.)
+  2. **Shorted:** its R ↓ (≈0 Ω), current *through* it ↑, voltage *across* it typically ↓ — exception: an ideal source wired directly across it pins the voltage.
+  3. **Open:** its R ↑ (≈∞), current through it → **0** (no continuity), voltage across it typically ↑ — up to the **full source voltage** (§5.7's troubleshooting gold, still true in hybrids).
+- Field direction is the inverse function: the book predicts *symptoms from a known fault*; debugging a board is inferring *the fault from observed symptoms*. Fluency forward makes the inverse tractable — the same reason you can't debug code without knowing what correct execution looks like.
+
+### 7.5 Building series-parallel circuits — layout is for humans
+
+- Breadboard: arrange parts to **mirror the schematic** where possible — free comprehension at zero electrical cost.
+- Need 24 V but own 6 V batteries? **Sources stack in series**: four 6 V in series = 24 V. (Same series voltage rule, applied to sources — this is also exactly how your ebike's battery pack works internally: series groups of cells.)
+- **Terminal strips:** components physically can't sit like the drawing, so the builder "bends" the schematic mentally. Method: mount and label all resistors first, then add wires **one schematic-connection at a time, overdrawing each connection on the schematic as it's completed** — mark-and-sweep for wiring; nothing gets skipped or doubled.
+- **Etiquette rules, with reasons:**
+  - ⚠️ **Max two wire ends per screw terminal.** Three works electrically but stresses the screw and makes a mess for whoever services it (a "faux pas," per the book). If a third connection is needed, land it on a different terminal that's already electrically common.
+  - **Orient components so all voltage-drop polarities read the same direction.** Electrons don't care; the human with an analog voltmeter (which pegs backwards on reversed polarity) very much does.
+- The chapter's closing law, worth engraving: **whenever a design can be modified for easier comprehension or maintenance at zero functional cost — do it.** The "human factor." This is code-review energy: the next person to probe the board is future-you at 1 a.m.
+
+---
+
+## Week 1 map — all seven chapters in one place
+
+*(One consolidated summary block, per plan: each entry = core idea → the one thing never to forget.)*
+
+**Ch. 1 — Basic concepts.** Electricity is mobile electrons. Voltage = stored push *between two points*; current = coordinated flow *through* a loop; resistance = opposition that converts flow to heat. Never forget: voltage is always between two points, current is identical everywhere in a single loop, and a break anywhere stops flow everywhere — with the **full source voltage appearing across the break**.
+
+**Ch. 2 — Ohm's Law & power.** E = I·R relates the big three; P = I·E (and I²R, E²/R) measures work-rate. Resistors carry two independent ratings: ohms *and* watts. Never forget: **every quantity in one equation must refer to the same two points**, and doubling voltage quadruples power (the square).
+
+**Ch. 3 — Safety.** Current does the harm; voltage pushes it; body resistance is a *variable* (≈1 MΩ dry → ≈1 kΩ sweaty metal grip). Never forget: treat **>30 V as dangerous**, double-digit mA are already dangerous, Ω-mode on dead circuits only, and the red-lead-left-in-the-A-socket blunder is a dead short through the meter.
+
+**Ch. 4 — Notation.** Scientific notation + metric prefixes are the number system of electronics; ENG calculator mode speaks it natively. Never forget: **M ≠ m** (nine orders of magnitude), k = 1000 never 1024, and 4k7 = 4.7 kΩ.
+
+**Ch. 5 — Series & parallel.** Series (one path): same I, R's add, drops add. Parallel (same two node-sets): same E, branch I's add, R_T lands *below the smallest branch*. Never forget: **the table method** — Ohm's Law vertically, topology rules horizontally — and the failure signatures: full V across an open, ≈0 V across a short.
+
+**Ch. 6 — Dividers & Kirchhoff.** Series divides voltage by resistance ratio: E_n = E_T·(Rn/R_T). Parallel divides current inversely: I_n = I_T·(R_T/Rn). Divider fractions are always < 1 — if yours isn't, it's flipped. KVL: loop voltages sum to zero; KCL: node currents sum to zero. Never forget: **signs are direction bookkeeping** against your assumed meter orientation, nothing more.
+
+**Ch. 7 — Series-parallel.** No global rules; instead **reduce → solve → expand**. Collapse pure clusters into equivalents — (R1//R2)--(R3//R4) — down to one resistor, get I_T, then unwind: series equivalents pass their *current* down, parallel equivalents pass their *voltage* down, Ohm's Law fills the gaps, KVL/KCL cross-check for free. For faults, run the same table over {↑, ↓, same}. Never forget: **when Ohm's Law has two moving inputs it's undecidable — a series/parallel rule breaks the tie**; and topology confusion, not formula confusion, is what actually causes wrong answers.
+
+---
+
+## The practical playbook — picking resistors and choosing formulas
+
+*(Plan-note, gap-filler beyond the book: the "okay, but how do I actually USE this at a bench" section. This is the bridge from Vol. I theory to the Arduino/STM32 work.)*
+
+### The universal design loop — nearly every resistor you'll ever choose
+
+1. **Identify the constraint.** Almost always either a target *current* (LED brightness, max GPIO pin current) or a target *voltage* (divider output, reference level).
+2. **Ohm's Law for the value:** R = E/I — where E is the voltage **the resistor itself sees** (not necessarily the supply!) and I the current through it. Getting E wrong here is the #1 beginner error, and it's the same-two-points rule from §5.6 again.
+3. **Power check:** P = I²R (or E²/R). Buy a part rated **≥ 2× the dissipation** — the standing derating habit. Your ¼ W kit parts are fine below ~125 mW, which covers nearly everything at logic voltages.
+4. **Round to a standard value** (next section — usually round *up* for current-limiting: higher R = less current = safer) and **re-run steps 2–3 with the real value** to confirm you're still in spec.
+
+### Standard values — why every circuit on Earth contains a 330 Ω and a 4.7 k
+
+- You can't buy arbitrary ohms. Resistors come in **E-series** preferred values, spaced *logarithmically* so adjacent values' tolerance bands just touch — no gaps, no pointless overlap:
+  - **E12 (±10% spacing):** 10 · 12 · 15 · 18 · 22 · 27 · 33 · 39 · 47 · 56 · 68 · 82 — times any power of ten.
+  - **E24 (±5%)** interleaves the rest: 11, 13, 16, 20, 24, 30, 36, 43, 51, 62, 75, 91.
+- So "my math says 300 Ω" becomes **330 Ω** off the shelf, and 4,700 Ω is a first-class citizen (47 × 100) — that's why 4k7 shows up in every schematic ever drawn.
+- CS anchor: E-series is logarithmic quantization — same reason float32 spacing grows with magnitude. Percentage error is what's held constant, not absolute error.
+- ⚠️ **Tolerance eats false precision:** a ±5% "330 Ω" is legitimately anything from 313.5–346.5 Ω. Design so ±5% *doesn't matter* — for LEDs, pull-ups, and dividers feeding high-impedance inputs, it never does. When it genuinely matters (precision dividers, current-sense shunts), buy ±1% (E96) parts; never try to hand-select ±5% ones.
+
+### Recipe 1 — the LED current-limiting resistor (the rite of passage)
+
+Series chain: rail → R → LED → GND. The LED drops a roughly fixed **forward voltage V_f** (≈1.8–2.2 V red/yellow/green; ≈3.0–3.4 V blue/white — check the datasheet). **The resistor only gets what's left over** — that's the E in step 2:
+
+**R = (V_rail − V_f) / I_target**
+
+- 5 V rail, red LED (V_f ≈ 2 V), 10 mA target: R = 3 V / 10 mA = 300 Ω → standard **330 Ω** → actual I = 3/330 ≈ 9.1 mA. Perfectly fine — perceived LED brightness is roughly logarithmic; 9 vs 10 mA is invisible.
+- Power check: P = I²R ≈ (9.1 m)² · 330 ≈ **27 mW** ≪ 250 mW ✓. LED resistors essentially never stress a ¼ W part at logic voltages.
+- 3.3 V GPIO version: red V_f 1.8 V, 6 mA (gentle on the pin): R = 1.5/0.006 = 250 → **270 Ω**. ⚠️ **The MCU pin is a circuit component too** — check the datasheet's per-pin current limit (typically ~20 mA absolute max, less recommended, plus a *total-across-all-pins* budget).
+
+### Recipe 2 — pull-up / pull-down sizing (Ch. 6's divider in disguise)
+
+A pull-up + switch (or open-drain pin) is a two-leg voltage divider whose bottom leg is either ≈∞ Ω (switch open → pin reads ≈V_rail) or ≈0 Ω (closed → pin reads ≈0 V). Sizing is a **trade-off, not a formula**:
+
+| | strong pull (1 k) | typical (10 k) | weak pull (100 k) |
+|---|---|---|---|
+| current burned while pulled low (5 V rail) | 5 mA — ouch | 0.5 mA | 50 µA |
+| edge speed / noise immunity | fast, solid | fine for buttons | slow (RC against pin + wiring capacitance), noise-prone |
+
+- **Defaults: 10 k** for GPIO buttons and reset lines; **4.7 k** for I2C at ordinary speeds (bus capacitance needs the stronger pull — the RC rise-time problem in the flesh); drift toward 47–100 k only when a µA sleep-current budget rules (§4.3's battery-firmware lesson meeting Ohm's Law).
+
+### Recipe 3 — a voltage divider that survives its load (Ch. 6 + Ch. 7, combined)
+
+Unloaded, pick the ratio: V_out = V_in · R₂/(R₁+R₂). But connect a load and it **parallels R₂** — the circuit is now series-parallel, and Ch. 7 is why you can compute the sag *exactly*: effective bottom leg = R₂//R_load < R₂, so the ratio (and V_out) drops.
+
+- **Rule of thumb: divider current ≥ 10× the load current** (equivalently **R₂ ≤ R_load/10**) → sag stays under ~10%. Go 100× stiff for anything feeding an ADC reading you care about.
+- The absolute scale is then a power trade: the divider burns V_in²/(R₁+R₂) **continuously**. 10k+10k across 5 V = 250 µA forever — irrelevant on USB power, fatal on a coin cell.
+- ⚠️ **Dividers make references, not supplies.** Anything drawing real current gets a regulator. (Also the standing trick for reading the ebike pack's 36–48 V with a 3.3 V ADC — divide it down ~15:1, high-ohm, and mind §3's rules while probing it.)
+
+### The dispatch table — which formula, when
+
+| you know | you want | reach for |
+|---|---|---|
+| E across a component + its R | current through it | I = E/R |
+| target I + the E the resistor will see | the resistor value to buy | R = E/I → round up to E12/E24 → re-check |
+| any two of E, I, R **on the same component** | the third | Ohm's Law — always legal within one column |
+| it's a series chain | anything | one shared I; R's add; drops add; drop ratio = resistance ratio (E_n = E_T·Rn/R_T) |
+| it's a parallel bank | anything | one shared E; branch I's add; R_T = 1/Σ(1/R) (two resistors: product/sum) |
+| it's a hybrid mess | anything | Ch. 7: reduce → solve → expand |
+| a resistor about to be purchased | will it survive | P = I²R or E²/R → rating ≥ 2× |
+| a fault, and no patience for arithmetic | expected symptoms | the {↑, ↓, same} qualitative table (§7.4) |
+
+- **The meta-rule under all of it: identify the topology first** — series? parallel? hybrid (→ reduce)? Once topology is named, the correct formula picks itself. Nearly every "which formula do I use?" moment is actually unresolved topology, not missing math.
+
+---
+
 ## Formula sheet
 
 ```
@@ -486,6 +651,20 @@ Safety:         treat > 30 V as dangerous · can't-let-go ≈ 10–16 mA (60 Hz 
                 body R: ~1 MΩ dry → ~17 kΩ sweaty → ~1 kΩ metal grip;  I = E/R_body decides severity
 Meter contract: voltmeter ≈ ∞ Ω, in parallel · ammeter ≈ 0 Ω, in series · Ω-mode on DEAD circuits only
                 dead-check = both AC & DC modes, all conductor pairs + each-to-ground, check–use–check
+
+Series-parallel: no global rules — REDUCE (collapse pure clusters → equivalents, repeat to one R)
+                 → SOLVE (I_T = E_T/R_T) → EXPAND (series eq. passes I down · parallel eq. passes E down)
+Notation:        R1//R2 = parallel equivalent · R1--R2 = series · e.g. R_T = (R1//R2)--(R3//R4)
+Cross-checks:    section drops sum to E_T (KVL) · branch currents sum to section I (KCL) · ΣP = P_T
+Fault rules:     R_T moves the SAME direction as the failed part
+                 short → R↓, I(through)↑, E(across) usually ↓ · open → R↑, I(through)=0, up to full E across it
+                 qualitative domain {↑, ↓, same} — Ohm's Law w/ two moving inputs is undecidable → use KVL/KCL/topology rule
+
+Resistor picking: R = E_across/I_target → P = I²R, rate ≥ 2× → round to standard value → re-check
+LED:             R = (V_rail − V_f)/I     (V_f ≈ 2 V red/yel/grn · ≈ 3.2 V blue/white — datasheet!)
+Pull-up:         10k default GPIO · 4k7 I2C · 47–100k when µA sleep current rules (strong=fast+hungry, weak=slow+frugal)
+Loaded divider:  bottom leg becomes R₂//R_load → keep R₂ ≤ R_load/10 (sag < ~10%) · dividers = references, not supplies
+E12 decade:      10 12 15 18 22 27 33 39 47 56 68 82  (±5% band on "330 Ω" = 313.5–346.5 Ω — design so it doesn't matter)
 ```
 
 ## Week 1 self-check — worked
@@ -500,6 +679,12 @@ Meter contract: voltmeter ≈ ∞ Ω, in parallel · ammeter ≈ 0 Ω, in series
 5. **Period of a 16 MHz clock (the classic ATmega328 speed)?** T = 1/f = 1/(16 × 10⁶) = 0.0625 × 10⁻⁶ s = **62.5 ns**. Divide → subtract exponents, then slide to the nearest multiple-of-3 prefix. This one number is why AVR people count cycles at 62.5 ns each.
 6. **If "current kills," why is the caution line drawn at 30 *volts*?** Because I = E/R_body and body R is a variable: sweat plus a solid metal grip drops it to ~1 kΩ, and 30 V / 1 kΩ = 30 mA — past can't-let-go, approaching heart-danger territory. The voltage threshold is just the current threshold with worst-case R plugged in. (Corollary: the 36–48 V ebike pack is over the line.)
 7. **You measure current, then turn the dial to V and probe a battery — what happens if the red lead stayed in the A socket?** The meter is still ≈0 Ω internally in that socket, so you've shorted the battery through the meter: I = E/≈0 → huge current → blown meter fuse (best case). Verify the lead position *before* the dial, every time.
+
+**Ch. 7 + playbook additions:**
+
+8. **Reduce 10k--(10k//10k).** Equal pair in parallel halves → 5 k; series adds → **15 k**. (Two AST nodes, evaluated bottom-up.)
+9. **Pick the resistor: 3.3 V rail, red LED with V_f = 1.8 V, target 6 mA.** The resistor sees 3.3 − 1.8 = 1.5 V (not 3.3 — same-two-points rule!). R = 1.5/0.006 = 250 Ω → standard **270 Ω** → actual I = 1.5/270 ≈ 5.6 mA ✓. Power: P = I²R ≈ 8.4 mW ≪ 250 mW ✓. Done in four steps of the design loop.
+10. **Qualitative: in the reference circuit (24 V, (R1//R2)--(R3//R4)), R4 fails open — what happens to the voltage across R3?** R3//R4 collapses to just R3 → that section's R ↑ → R_T ↑ → I_T ↓ → drop across R1//R2 ↓ (same R, less I) → **by KVL, drop across R3 ↑**. Numbers to confirm the arrows: section R 127.27 → 350 Ω; R_T 198.70 → 421.4 Ω; I_T 120.78 → 56.96 mA; E_R3 15.373 → **19.94 V**. Counterintuitive bonus: current *through R3 rises* (43.92 → 56.96 mA) even though *total* current fell — R3 now carries all of a smaller total instead of a share of a bigger one. (This is exactly the kind of result the {↑,↓,same} table catches and gut instinct misses.)
 
 ## Falstad labs (Ch. 1–2 builds)
 
@@ -529,6 +714,14 @@ Meter contract: voltmeter ≈ ∞ Ω, in parallel · ammeter ≈ 0 Ω, in series
 - [ ] Set the calculator display mode to ENG and leave it
 - [ ] Falstad: hover a low-current circuit and read the values aloud in both prefix form and scientific notation until translation is instant
 
+**Ch. 7 builds:**
+
+- [ ] The reference circuit (24 V, 100/250 ∥ over 350/200 ∥): fill the entire E/I/R (+P) table on paper via reduce-solve-expand *first*, then hover-verify every value; confirm both KCL sums land on 120.78 mA and ΣP = P_source
+- [ ] Fault drills on the same build: short R2 and check every arrow from §7.4's walkthrough; then open R4 and verify self-check #10's numbers (especially that I through R3 *rose*)
+- [ ] The 7-resistor monster (§7.3): re-draw on paper with the loop-tracing method, polarity marks included; reduce symbolically right-to-left; assign your own values; predict R_T and I_T; build in Falstad and verify — this one exercise is the whole chapter
+- [ ] Loaded-divider bridge to Week 2: 10k+10k on 5 V → hover V_out = 2.5 V; hang a 10k load → predict via R₂//R_load = 5k → V_out = 5·(5/15) ≈ 1.67 V, verify the sag; swap the load to 100k and watch the ≤R_load/10 rule hold (V_out ≈ 2.38 V)
+- [ ] Playbook rep: pick the resistor for a 5 V / blue-LED (V_f ≈ 3.2 V) / 8 mA branch on paper (→ 225 Ω → 270 Ω standard), then build and confirm the actual current
+
 ## Hooks to later weeks
 
 - Voltage-divides-by-resistance (§2.7 + 1.6) → **Week 2** divider derivation Vout = Vin·R₂/(R₁+R₂)
@@ -553,3 +746,12 @@ Meter contract: voltmeter ≈ ∞ Ω, in parallel · ammeter ≈ 0 Ω, in series
 - 4k7 / 2R2 point-free notation → **Week 20** KiCad schematics and silkscreens use it natively
 - E-notation + the `M` vs. `MEG` gotcha → any move from Falstad to netlist SPICE (ngspice/LTspice)
 - Sig figs & ENG display → datasheet literacy: every spec is a precision claim (typ/min/max), not an exact value
+- Reduce-solve-expand → the gateway to **Thévenin/Norton equivalents** (network theorems, Vol. I Ch. 10): the ultimate "reduce" — any two-terminal mess collapses to one source + one resistor
+- Loaded divider as the canonical series-parallel circuit → **Week 2** sag lab; → **Week 7** pot→ADC→PWM, where the ADC input impedance *is* the load
+- Qualitative {↑,↓,same} fault tables → **Week 24** board bring-up: symptom→fault is the inverse of this chapter's fault→symptom, and forward fluency is what makes the inverse tractable
+- Re-drawing convoluted schematics → **Week 20** KiCad, and the standing skill of reading vendor reference designs and datasheet application circuits (never drawn for your convenience)
+- Every meter measurement creates a series-parallel circuit (voltmeter ≈∞ Ω parallels its target; ammeter ≈0 Ω inserts in series) → **Week 19** burden voltage and scope-probe loading — now computable exactly, not just hand-waved
+- ≤2-wires-per-terminal + polarity-consistency etiquette → general layout hygiene and silkscreen/orientation conventions on real boards
+- E-series values + design-for-tolerance → **Week 20** BOM building; the ±1%-when-it-matters judgment call returns at current-sense shunts
+- Dummy 0 V sources as SPICE ammeters → ngspice/LTspice netlist debugging, where Falstad's hover doesn't exist
+- Sources stack in series (4 × 6 V = 24 V) → battery pack architecture: the ebike's 36–48 V pack is series cell groups, and pack voltage math is Ch. 5 rules applied to sources
