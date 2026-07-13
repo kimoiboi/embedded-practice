@@ -1,5 +1,5 @@
 # Week 1 Notes — DC Theory Foundations
-**Source:** All About Circuits, Vol. I — Ch. 1 (Basic Concepts of Electricity), Ch. 2 (Ohm's Law), Ch. 5 (Series & Parallel Circuits), Ch. 6 (Divider Circuits & Kirchhoff's Laws)
+**Source:** All About Circuits, Vol. I — Ch. 1 (Basic Concepts of Electricity), Ch. 2 (Ohm's Law), Ch. 3 (Electrical Safety), Ch. 4 (Scientific Notation & Metric Prefixes), Ch. 5 (Series & Parallel Circuits), Ch. 6 (Divider Circuits & Kirchhoff's Laws)
 **Habit:** every worked example gets rebuilt in Falstad. Hover wires for current, nodes for voltage, check against hand math.
 
 ---
@@ -154,6 +154,171 @@
 - The chapter demos SPICE: describe the circuit as a text netlist (components + shared node numbers), run, read node voltages / source currents / power. Node 0 = reference.
 - Netlists confirm everything above: 10 V / 5 Ω → 2 A, 20 W; sweep V 0→100 and current tracks at exactly E/5.
 - *For this plan:* Falstad gives the same insight interactively — the takeaway is the concept of **nodes** (electrically common points get one label), which returns in Week 20 when KiCad calls them "nets."
+- SPICE prints results like `-4.800E+00` — that's E-notation, decoded properly in §4.6.
+
+---
+
+## Chapter 3 — Electrical Safety
+
+**Why this chapter is in a CS→embedded plan:** almost everything on the roadmap runs at 3.3–5 V from USB — genuinely safe territory. The danger lives at the edges: the mains side of wall adapters and the soldering iron (Week 4), anything opened up that has a plug, and the ebike pack / power station (36–48 V with serious current capability — over the danger line defined below). Bonus: every safety rule here is just Ch. 1–2 circuit analysis with stakes, so this doubles as review.
+
+### 3.2 What current does to a body — three failure modes
+
+1. **Burns.** The body has resistance; current through it dissipates P = I²R as heat — and unlike a flame, electricity cooks *from the inside*: organs and tissue beneath unbroken skin.
+2. **Tetanus** — involuntary, sustained muscle contraction. Nerves signal electrochemically with tiny voltages and currents; an external shock current overwhelms the channel, and every muscle in the path locks up. The finger-*bending* (flexor) muscles are stronger than the finger-*extending* ones, so a hand around a live conductor clamps **on** — "froze on the circuit" — which maintains contact and makes everything worse. Only stopping the current releases the grip.
+3. **Fibrillation.** The diaphragm and heart are muscles too. Currents even *below* the tetanus threshold can scramble the heart's pacemaker signals → it flutters uselessly instead of pumping → asphyxiation / cardiac arrest.
+
+**AC vs. DC — they fail differently:**
+
+| | 50/60 Hz AC (mains) | DC |
+|---|---|---|
+| muscle effect | sustained tetany — freezes you **onto** the source, prolonging exposure | single convulsive contraction — often throws you **off** |
+| heart effect | fibrillation (flutter; doesn't self-recover) | tends to stop the heart still — better recovery odds once current stops |
+| relative danger | **3–5× worse** than DC at the same voltage/current | baseline |
+
+- Defibrillators exploit exactly this: a jolt of **DC** halts fibrillation so the heart can restart in a normal rhythm. (Fibrillating heart ≈ livelocked process; the defib is a hard reset.)
+
+### 3.3 Shock requires a complete circuit — the two-contact-point rule
+
+- Ch. 1's break-location rule, applied to you: current needs a closed loop, so **no shock without two contact points on the body**. The famous bird on the power line: both feet on the *same* conductor → electrically common (§2.7) → 0 V between them → no current through bird.
+- You are not the bird because you **stand on the earth**, and power systems deliberately ground one conductor. Touch just the hot wire and the loop closes anyway: wire → you → dirt → grounding rod → back to the source.
+- **Why ground the system at all, if that's what creates the path?** Because grounding one side *guarantees that side is safe to touch* (0 V to earth). An ungrounded system seems safer but is actually **unpredictable**: any accidental **ground fault** — tree branch on a wire, dirty rain-wet insulators, groundwater into a buried cable — silently grounds one conductor, and you have no idea which wire just became the deadly one. Worse: two people touching different conductors complete the circuit *through each other* via the earth. Deliberate grounding buys certainty.
+- Footwear is not PPE: ordinary soles are thin, the wrong material, and compromised by moisture and sweat salts. Book figures: rubber ≈ 20 MΩ; dry leather 100–500 kΩ; **wet leather 5–20 kΩ**.
+- Dirt conducts poorly — but "poorly" is irrelevant when milliamps injure and the system pushes with kilovolts. Concrete conducts fairly well (intrinsic water + electrolytes); asphalt (oil-based) insulates much better.
+
+### 3.4 Ohm's Law with stakes — I = E/R, where R is *you*
+
+- "It's current that kills, not voltage" is only half-true. Current does the damage, but **I = E / R_body**: voltage supplies the push and your body-plus-contact resistance sets how much actually flows. All three variables matter.
+- **Body resistance is a variable, not a constant** (echo of the nonlinear filament, §2.6):
+
+| condition (hand-to-hand) | R ≈ |
+|---|---|
+| clean dry skin, light finger contact | ~1 MΩ |
+| sweaty fingers on a wire | ~17 kΩ |
+| sweaty, solid grip on metal (ring, pipe, tool) | ~1 kΩ |
+
+- The chapter's worked math — voltage needed to push 20 mA (can't-let-go territory): 1 MΩ → 20 kV. 17 kΩ → 340 V. 1 kΩ → **20 V**. Read that last row twice.
+- ⚠️ **Industry rule: treat anything above 30 V as dangerous** — because worst-case body R makes tens of volts sufficient. *The ebike pack and the power station live above this line*, with current capability to spare. Handle them with mains-level respect: dry hands, one hand, no jewelry.
+- Nasty positive-feedback loop: shock → sweating + tetanus-tightened grip → contact R drops → current rises → worse. A survivable shock can *escalate while it's happening*.
+- The danger ladder (60 Hz AC — the worst case; DC thresholds run several times higher):
+  - ~1 mA: threshold of perception
+  - ~6–9 mA: painful, muscle control retained
+  - **~10–16 mA: painful, can't let go**
+  - ~15–23 mA: severe pain, breathing difficulty
+  - ~100 mA (suggested as low as ~17 mA across the chest): fibrillation possible
+- Calibration for intuition: the classic LED operating current — 20 mA — is already inside the can't-let-go band. Milliamps through the chest are the entire game.
+- Contact area is parallel resistance (§5.3 preview): two hands on a pipe = exactly **half** the R of one hand (two parallel entry paths). Metal jewelry = an excellent low-R contact point, and a burn hazard even at "safe" voltages — rings bridging low-voltage/high-current points cook fingers.
+- **The one-hand rule:** on any live circuit, work with one hand, the other in your pocket — it keeps the current path off the hand-to-hand route through heart and lungs (the worst possible path). Right hand conventionally preferred (heart sits left of center), but coordination beats convention.
+- Low voltage harms indirectly too: a 12 V tingle that makes you flinch can throw your arm into a fan or drop a wrench across battery terminals (the author's own car anecdote — sweaty leg on chrome bumper).
+- Insulated tools, gloves, and boots = deliberately added **series resistance** in the fault path (§5.2: series resistances add, so total current falls).
+
+### 3.5 Safe practices — Zero Energy State and lock-out/tag-out
+
+- **Zero Energy State** = *all* stored potential energy removed before work begins: voltage, spring tension, hydraulic/pneumatic pressure, suspended weight, chemical. Voltage *is* potential energy — a connected supply (or a charged capacitor) is fully dangerous while sitting there "doing nothing."
+- The **disconnect switch** is a dedicated isolation device, separate from the everyday on/off switch, placed in the hot conductor. Open = full source voltage sits across the switch gap, 0 V at the load (Ch. 1's "full voltage across the break," used on purpose).
+- Belt-and-suspenders: temporarily short/ground **both** sides of the load being serviced → 0 V across it guaranteed; if someone closes the disconnect anyway, the short trips the breaker instantly. (⚠️ Perspective check: breakers and fuses exist to keep **wires** from overheating — protecting people is *not* their job; the shorting-wire trick merely hijacks them for it.)
+- **Lock-out/tag-out (LOTO):** every worker hangs their *own* padlock on every relevant energy disconnect, plus a signed tag (who, what, how long). Power cannot return until *every last lock* is removed — each worker holds a veto. CS mapping: it's a reference count on de-energization; the system re-energizes only at count zero, and you may only release your own lock. Even so — never assume everyone followed procedure.
+- **Check–use–check** the meter: (1) verify the meter reads a known-live source, (2) test the locked-out circuit, (3) verify the meter on the known source *again*. This guards against a broken meter reporting "dead" — a false negative from a single unverified sensor on a life-critical check nearly killed the author once. Redundancy for safety-critical reads, always.
+- Very last step before touching: brush the conductor with the **back of the hand** first — if voltage remains, the clench reflex pulls the fingers *away from* the conductor instead of around it. A final fallback layer, never a substitute for the meter checks.
+
+### 3.6 Emergency response
+
+- Victim frozen or unconscious on a circuit: **kill the power first** (disconnect/breaker). Grab them and there may be enough voltage across their body to freeze you in the same circuit — two victims. The chapter's line: don't be a hero; electrons don't respect heroism.
+- Can't locate the disconnect fast enough: pry or knock them clear with something *dry and nonconductive* — wooden board, nonmetallic conduit — or loop an extension cord around the torso and pull. Expect their grip to be locked (tetanus).
+- Once clear: breathing and pulse first; CPR if trained, and keep going until relieved by qualified personnel. Conscious victim: keep them lying still, warm, and comfortable (risk of physiological shock — a circulation problem, different thing from electric shock).
+- ⚠️ **The danger doesn't end at the incident:** shock can trigger heart irregularities or a heart attack **hours later**. Victims need monitoring even if they feel fine.
+
+### 3.7 Everyday hazard sources
+
+- Wet skin = resistance collapse, and salty sweat is worse than fresh water. Bathrooms and pools are the classic appliance-shock venues — keep powered gadgets away from water, period. Surprise entry: landline phone wiring idles at 48 V DC and hits **~150 V AC while ringing** — well over the 30 V line.
+- "It's battery-powered so it's safe" is false: devices with **voltage-boosting circuitry** (boost converters, flash-charge circuits) can hold lethal internal potentials off a few AA cells.
+- Damaged extension cords and tools that occasionally tingle: out of service *immediately*. Decommissioning trick: unplug it and **cut off the male plug** so nobody can use it before it's repaired.
+- **Downed power lines — step potential:** current fans out through the earth between the fallen conductor and the system ground point, dropping substantial voltage along the ground itself. Feet planted a stride apart = two taps on a voltage divider made of dirt → shock up one leg and down the other *without touching anything*. If a line drops near you: run (only one foot down at a time) or stand on one foot.
+
+### 3.8 Safe circuit design — hot, neutral, ground, GFCI
+
+- Two-wire household power: the grounded conductor is the **neutral** (held at earth potential); the ungrounded one is the **hot** (the dangerous one). Grounding exists *purely for people* — the load runs identically without it.
+- Failure model to reason from: an internal wire contacts a metal appliance case.
+  - neutral → case: nothing happens (case was already ≈ earth potential)
+  - **hot → case: the case is now live**, and the user touching it becomes the ground path.
+- The defense-in-depth stack (each layer independent):
+  1. **Polarized plugs** — mechanical keying (one wide prong) so the designer *knows* which internal conductor is hot and routes it away from the case. Defeated if the plug is reversible.
+  2. **Double insulation** — nonconductive case = a second, independent insulation layer.
+  3. **Three-prong grounded case** — the case is hard-wired to earth; a hot→case fault becomes a dead short that trips the breaker instantly, and the case never rises above earth potential. ⚠️ Never snip the third prong to fit a two-slot receptacle — that deletes the entire safety mechanism while the appliance keeps working normally (silent failure).
+  4. **GFCI** (RCD/ELCB outside North America) — continuously compares I_hot against I_neutral. In a healthy appliance they're identical (one loop, §1.4). Any imbalance means current is leaking out via some other path — possibly a person — so it trips within milliseconds. This is **KCL deployed as a runtime safety check**: current in must equal current out; a mismatch is an invariant violation → kill the power. Works regardless of the appliance's own design, which is why wet locations require them.
+- **AFCI** — an electronic breaker that recognizes the signature of intermittent *arcing* (repetitive high-current spikes whose average never trips a thermal breaker but which start fires). Fire protection, **not** shock protection — bedrooms get AFCIs, kitchens/baths still need GFCIs. Known to nuisance-trip on brushed-motor startup.
+
+### 3.9 Safe meter usage — the multimeter's contract
+
+The practical payoff — Week 3's meter work runs on these rules. A multimeter has three personalities, and mixing them up is the main way meters hurt people and die.
+
+- **Voltmeter (V):** connect *across* two points — in **parallel** — because voltage only exists between two points (§1.4). Input resistance ≈ many MΩ, so it draws essentially nothing and doesn't disturb the circuit. Cautions: never let the probe tips touch each other on a live circuit (instant short/arc), hand-to-hand probing of a high-voltage circuit is itself a hazard (latch one probe with a spring clip and work one-handed where possible), and cracked probe insulation = fingers on conductors — never improvise DIY probes.
+- **Proving a circuit dead** (the LOTO verification step): a meter set to AC reads 0 on DC and vice versa, so check **both modes**; and check **all pairs** — every conductor-to-conductor pair *and* every conductor-to-ground. Three wires = 6 pairs × 2 modes = **12 checks**. Then re-verify the meter on a live source (check–use–check).
+- **Ohmmeter (Ω):** the meter *sources* a small current from its internal battery and measures how hard pushing it is. Therefore **de-energized circuits only** — any external voltage corrupts the reading at best and damages the meter at worst. Continuity readings: ≈0 Ω = connected; "O.L." (open loop) = broken path. (This is the §2.7 troubleshooting tool: two points that should be common must read ≈0 Ω.)
+- **Ammeter (A) — the trap mode:**
+  - Current is measured *through*, so the meter goes **in series**: physically break the circuit and route the current through the meter.
+  - In A mode the meter is ≈0 Ω *by design* — added resistance would change the very current being measured.
+  - ⚠️ **The classic blunder:** finish a current measurement, spin the dial back to V, but leave the red lead in the A socket, then probe across a source. You've just connected a ≈0 Ω path straight across the supply — a dead short *through the meter*. Sparks, blown fuse, possibly a dead meter. Most meters beep at the lead/dial mismatch; don't outsource thinking to the beep.
+- One-liner to memorize: **voltmeter ≈ ∞ Ω, wired in parallel; ammeter ≈ 0 Ω, wired in series — and each is a catastrophe in the other's position.**
+- The internal **fuse** (which blows on ammeter abuse) protects *the meter*, only incidentally you. Self-test it in Ω mode probing between the two red sockets: low ohms = good fuse, O.L. = blown.
+
+### 3.10 Where the numbers came from
+
+- The threshold tables trace to Charles Dalziel's UC Berkeley experiments (volunteers gripping a wire and a brass plate at increasing current until release became impossible). Sources (MIT vs. Bussmann) disagree slightly; the book lists the *lowest* figures. Treat every threshold as approximate and person-dependent — the engineering takeaway is simply: **double-digit milliamps are already dangerous.**
+
+---
+
+## Chapter 4 — Scientific Notation and Metric Prefixes
+
+Short chapter, permanent skill: this is the **number-formatting layer** of electronics. Every datasheet, schematic, silkscreen, and simulator speaks it — the goal is fluency, not familiarity.
+
+### 4.1 Scientific notation and significant digits
+
+- Electronics spans absurd ranges: 1 A = 6.25 × 10¹⁸ electrons/second (Ch. 1's coulomb again); a proton masses 1.67 × 10⁻²⁴ g. Long strings of zeros invite transcription errors and bury what matters.
+- **Significant digits encode measurement *precision*, not just value.** "The car weighs 3,000 lbs" (rounded) → one sig fig; "3,005 lbs" → four, because those middle zeros were clearly measured, not placeholders. Plain decimal notation *cannot express* "3000, exact to the pound" — scientific notation can: **3.000 × 10³** (zeros after the decimal are never placeholders, so writing them asserts they're significant).
+- Format: mantissa in [1, 10) × 10^exponent. Positive exponent → slide the decimal right (big numbers); negative → left (small numbers).
+- CS anchor: this is IEEE-754 in base 10 — sign, significand, exponent. You've read `6.25e18` your whole programming life; this chapter is just the pencil-and-paper version.
+
+### 4.2 Arithmetic with scientific notation
+
+- **Multiply:** multiply the mantissas, **add** the exponents. **Divide:** divide the mantissas, **subtract** the exponents. (Identical exponent rules to your powers-of-2 arithmetic — 2⁵·2³ = 2⁸ reasoning, base 10.)
+- Renormalize afterwards: (6.25 × 10¹⁸)(3.6 × 10³) = 22.5 × 10²¹ → **2.25 × 10²²**.
+- Historical why: slide-rule users did mantissas on the rule and exponents in their heads. The tooling is obsolete; the skill survives as **instant order-of-magnitude sanity checking** — the fastest bug detector for hand calculations there is.
+
+### 4.3 Metric (engineering) notation
+
+- Metric prefixes = scientific notation with the power-of-ten swapped for a letter, exponents restricted to **multiples of 3**, and the mantissa allowed to roam 1–999.
+
+| prefix | symbol | power | | prefix | symbol | power |
+|---|---|---|---|---|---|---|
+| tera | T | 10¹² | | milli | m | 10⁻³ |
+| giga | G | 10⁹ | | micro | µ | 10⁻⁶ |
+| mega | M | 10⁶ | | nano | n | 10⁻⁹ |
+| kilo | k | 10³ | | pico | p | 10⁻¹² |
+
+  (Extremes exist — P/E/Z/Y going up, f/a/z/y going down — plus non-multiple-of-3 stragglers hecto/deca/deci/centi that electronics ignores.)
+- ⚠️ **Case is load-bearing: M = mega, m = milli — nine orders of magnitude apart.** mW vs. MW is *the* classic units typo. Also unlearn the CS reflex: in electronics **k = exactly 1000, never 1024** — no KiB ambiguity here.
+- Embedded life happens in a narrow prefix band; get fast in it: kΩ/MΩ resistors, µF–nF–pF capacitors, mA run currents and **µA sleep currents** (the number battery-powered firmware lives and dies by), MHz clocks, **ns** rise/setup times, mV noise margins.
+- **The "4k7" convention:** decimal points vanish in cheap print and tiny silkscreens (4.7 k misread as 47 k), so the prefix letter replaces the point: 4.7 kΩ → **4k7**, 2.2 Ω → **2R2**, 0.267 m → 0m267. You'll see this constantly on real PCBs and schematics — it's a feature, not a typo.
+
+### 4.4 Prefix conversions
+
+- Conversion = sliding the decimal along the prefix number line: count the powers of ten between source and target prefix, shift the decimal that many places in that direction.
+- Worked: 0.000023 A → µA: unit→micro is 6 steps right → **23 µA**. 304,212 V → kV: 3 left → **304.212 kV**. 50.3 MΩ → mΩ: mega→milli is 9 right → **50.3 × 10⁹ mΩ**.
+- Sanity invariant: **bigger prefix ⇔ smaller mantissa** (and vice versa) — the physical quantity is conserved, only the representation moves. If both grew, you shifted the wrong way. Same instinct as byte↔KB↔MB conversions.
+- (A number with no visible decimal point has one implied after its last digit: 436 = 436.)
+
+### 4.5 Calculator use
+
+- The **[EE]/[EXP]** key enters powers of ten directly; **[+/−]** negates whichever part was just typed — order matters: −3.221 × 10⁻¹⁵ is `3.221 [+/-] [EE] 15 [+/-]` (first one flips the mantissa, second flips the exponent).
+- Display modes: **SCI** normalizes the mantissa to 1–10; **ENG** forces the exponent to a multiple of 3 — i.e., prefix-ready output. **Set the calculator to ENG and leave it there** — it then speaks datasheet natively, and every result maps straight onto a prefix from the table above.
+
+### 4.6 SPICE and E-notation
+
+- Simulators — and every programming language — print **E-notation**: `-4.800E-03` = −4.8 × 10⁻³ A = **−4.8 mA**. It's `printf("%e")`; already fluent.
+- Netlists accept prefixes inline: `r1 1 0 5k` means 5 kΩ. And output convention: `1.15E-01` W gets expressed as **115 mW**, because electronics sticks to multiple-of-3 prefixes (nobody says "1.15 deciwatts").
+- ⚠️ *Plan-note (gap-filler beyond the chapter):* SPICE-family netlist tools are **case-insensitive**, so `M` cannot mean mega — `1M` parses as 1 *milli*; mega is spelled **`MEG`**. A classic silent simulation bug. Falstad's GUI spares you; ngspice/LTspice netlists won't.
+- SPICE's negative sign on source current is a tool convention, not physics — the same lesson as KVL's negative answers in §6.2: **a sign is direction bookkeeping against an assumed orientation**, nothing more.
 
 ---
 
@@ -312,6 +477,15 @@ Current divider: I_n  = I_T·(R_T/Rn)   (parallel — ratio < 1, small over big)
 
 KVL: Σ voltages around any closed loop = 0   (signs from meter-lead orientation)
 KCL: Σ currents at any node = 0              (entering +, exiting −, be consistent)
+
+Prefixes:       T=10¹²  G=10⁹  M=10⁶  k=10³ | m=10⁻³  µ=10⁻⁶  n=10⁻⁹  p=10⁻¹²   (M ≠ m! k = 1000, not 1024)
+Sci. notation:  multiply → add exponents · divide → subtract exponents · renormalize after
+                bigger prefix ⇔ smaller mantissa (if both grew, you shifted the wrong way)
+
+Safety:         treat > 30 V as dangerous · can't-let-go ≈ 10–16 mA (60 Hz AC) · fibrillation risk ≥ ~100 mA
+                body R: ~1 MΩ dry → ~17 kΩ sweaty → ~1 kΩ metal grip;  I = E/R_body decides severity
+Meter contract: voltmeter ≈ ∞ Ω, in parallel · ammeter ≈ 0 Ω, in series · Ω-mode on DEAD circuits only
+                dead-check = both AC & DC modes, all conductor pairs + each-to-ground, check–use–check
 ```
 
 ## Week 1 self-check — worked
@@ -319,6 +493,13 @@ KCL: Σ currents at any node = 0              (entering +, exiting −, be consi
 1. **Current through 220 Ω across 5 V?** I = E/R = 5/220 ≈ **22.7 mA** ✓ (this is *the* LED-resistor ballpark)
 2. **Two 1 kΩ in parallel?** Equal resistors halve: **500 Ω**. (Ch. 5: R_T = 1/(1/R₁+1/R₂), or the two-resistor shortcut R₁R₂/(R₁+R₂) = 1M/2k = 500 Ω. Sanity check: below the smallest branch ✓.)
 3. **What is "ground," in your own words?** *Draft answer:* Ground is the point I choose as the 0 V reference so single-node "voltages" mean something — since voltage only exists *between* two points, every node voltage is really "this node measured against ground." It's a bookkeeping choice (SPICE's node 0), and often also the common return path of the circuit.
+
+**Ch. 3–4 additions:**
+
+4. **Express 0.000047 F with a proper prefix.** Unit→micro is 6 places right → **47 µF** (the most common electrolytic cap value there is). Double-check via the invariant: prefix got bigger-in-smallness (µ), mantissa got bigger — one up, one down ✓.
+5. **Period of a 16 MHz clock (the classic ATmega328 speed)?** T = 1/f = 1/(16 × 10⁶) = 0.0625 × 10⁻⁶ s = **62.5 ns**. Divide → subtract exponents, then slide to the nearest multiple-of-3 prefix. This one number is why AVR people count cycles at 62.5 ns each.
+6. **If "current kills," why is the caution line drawn at 30 *volts*?** Because I = E/R_body and body R is a variable: sweat plus a solid metal grip drops it to ~1 kΩ, and 30 V / 1 kΩ = 30 mA — past can't-let-go, approaching heart-danger territory. The voltage threshold is just the current threshold with worst-case R plugged in. (Corollary: the 36–48 V ebike pack is over the line.)
+7. **You measure current, then turn the dial to V and probe a battery — what happens if the red lead stayed in the A socket?** The meter is still ≈0 Ω internally in that socket, so you've shorted the battery through the meter: I = E/≈0 → huge current → blown meter fuse (best case). Verify the lead position *before* the dial, every time.
 
 ## Falstad labs (Ch. 1–2 builds)
 
@@ -338,6 +519,16 @@ KCL: Σ currents at any node = 0              (entering +, exiting −, be consi
 - [ ] Current divider: 6 V + 1k∥3k∥2k — predict 6/2/3 mA with I_n = I_T·(R_T/Rn) first, verify by hover; then check KCL at one node by hand
 - [ ] Power cross-check: add P = I·E per resistor in one of the above and confirm ΣP = P_source
 
+**Ch. 3–4 drills (bench habits — mostly no sim needed):**
+
+- [ ] Multimeter ritual before every session: leads in the V/Ω sockets, dial position confirmed, fuse self-test (Ω mode between the two red sockets — low Ω = good, O.L. = blown)
+- [ ] Check–use–check on a 9 V battery: known source → target → known source again, until it's automatic
+- [ ] Continuity feel: a jumper wire (≈0 Ω / beep) vs. the same path broken (O.L.)
+- [ ] Recite the never-list until it's reflex: never Ω/continuity on a powered circuit · never turn the dial with the red lead still in the A socket · one hand for anything unknown · nothing above 30 V without a plan · no rings/watch at the bench
+- [ ] Prefix sprint: 10 freehand conversions (µA↔mA, pF↔nF↔µF, kHz↔MHz, ns↔µs), then verify with the calculator in ENG mode
+- [ ] Set the calculator display mode to ENG and leave it
+- [ ] Falstad: hover a low-current circuit and read the values aloud in both prefix form and scientific notation until translation is instant
+
 ## Hooks to later weeks
 
 - Voltage-divides-by-resistance (§2.7 + 1.6) → **Week 2** divider derivation Vout = Vin·R₂/(R₁+R₂)
@@ -354,3 +545,11 @@ KCL: Σ currents at any node = 0              (entering +, exiting −, be consi
 - Breadboard column-of-5 internals + split rails + <1 A limit → **Week 3**; soldering & terminal strips → **Week 4**
 - Common-wire numbering / TB labels → **Week 20** KiCad nets and schematic-as-map discipline
 - Table method (Ohm vertical, rules horizontal) → the standing habit for every analysis chapter from here on
+- Meter contract (∞ Ω voltmeter / 0 Ω ammeter, Ω-on-dead-only, all-pairs dead checks) → **Week 3** meter work becomes procedure instead of improvisation
+- Real ammeters aren't quite 0 Ω — the internal shunt drops real voltage → **Week 19** burden voltage (same tile as the §6.3 current-divider shunt)
+- 30 V threshold + variable body R → standing rules for the **ebike pack & power station**: treat as dangerous, one hand, dry hands, no jewelry
+- GFCI = KCL as a runtime invariant check → reinforces §6.4, and the same "current in must equal current out" reasoning finds leakage paths when debugging boards later
+- Soldering iron and wall adapters are mains devices → **Week 4**: cord/plug/insulation inspection habit before every soldering session
+- 4k7 / 2R2 point-free notation → **Week 20** KiCad schematics and silkscreens use it natively
+- E-notation + the `M` vs. `MEG` gotcha → any move from Falstad to netlist SPICE (ngspice/LTspice)
+- Sig figs & ENG display → datasheet literacy: every spec is a precision claim (typ/min/max), not an exact value
