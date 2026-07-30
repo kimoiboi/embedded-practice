@@ -7,7 +7,7 @@
 ![Hardware](https://img.shields.io/badge/hardware-Arduino%20%7C%20STM32%20%7C%20ESP32-purple)
 ![Goal](https://img.shields.io/badge/goal-firmware%20portfolio-success)
 
-A structured journey to learn embedded systems through hands-on labs, C drills, Arduino projects, communication protocols, STM32 bare-metal firmware, FreeRTOS, PCB design, secure OTA updates, and a final capstone project.
+A structured journey to learn embedded systems through hands-on labs, C drills, Arduino projects, communication protocols, STM32 bare-metal firmware, FreeRTOS, PCB design, secure OTA updates, and a final capstone project. If you'd like to watch my journey, I have created a youtube playlist of the learning journey: https://www.youtube.com/watch?v=xAelrTIjRDE&list=PLR52yoyOKWu4 
 
 This repository is my public lab notebook, project archive, skill tracker, and interview-prep portfolio.
 
