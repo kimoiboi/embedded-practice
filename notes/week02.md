@@ -605,15 +605,15 @@ Absolute Maximum Ratings = destruction limits; design to Recommended Operating C
 - [x] Predict the loaded value by hand **before** attaching the 1 kΩ
 - [x] Verify the sag; verify KCL at the output node
 - [x] Compute R1∥R2 and relate it to the load
-- [ ] *Deferred:* SPST switch in series with the load to toggle the sag live
+- [x] SPST switch in series with the load to toggle the sag live
 - [ ] *Deferred:* sweep the load (100 k → 100 Ω, 8 points) and plot V_out vs. R_load; find the knee and compare to R1∥R2
 - [ ] *Deferred:* rebuild at 10 Ω / 20 Ω and confirm both the reduced sag and the >¼ W dissipation
 
 ### Lab 2 — RC charging curve ⬜ TOMORROW
 
-- [ ] Pick R and C so τ is watchable (10 k + 100 µF → τ = 1 s); slow the Falstad sim speed down
-- [ ] **Predict first:** write down the expected voltage at 1τ, 2τ, 3τ from the exponential
-- [ ] Scope the capacitor, run, and check the three points against the prediction
+- [x] Pick R and C so τ is watchable (10 k + 100 µF → τ = 1 s); slow the Falstad sim speed down
+- [x] **Predict first:** write down the expected voltage at 1τ, 2τ, 3τ from the exponential
+- [x] Scope the capacitor, run, and check the three points against the prediction
 - [ ] **Scope the resistor too** — confirm the current is the mirror image, starting at V/R and decaying
 - [ ] Verify §B.3 directly: at t=0 the cap acts as a short (full current, ~0 V across it); at t=∞ as an open (0 current, full V across it)
 - [ ] **Double R and halve C.** Predict, then confirm the curve is unchanged — τ is the only thing that matters
