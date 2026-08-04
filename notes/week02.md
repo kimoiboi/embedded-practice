@@ -291,8 +291,17 @@ For switching you want the transistor to be a **bit**, not a float — hard off 
 
    **R_B = (V_GPIO − V_BE) / I_B**, with V_BE ≈ 0.7 V
 
-4. **Round the standard value DOWN**, not up. ⚠️ This is the **opposite** of LED current-limiting: there, less current is safer; here, less base current risks falling out of saturation. More base drive is the safe direction.
-5. **Size the collector-side resistor including V_CE(sat)** — small, but include it as a habit.
+4. **Round R_B DOWN**, not up. ⚠️ Smaller R_B → more base current → deeper saturation.
+5. **Size the collector-side resistor including V_CE(sat)** — small, but include it as a habit. **Round R_C UP** — this is just the LED rule from §D.2, unchanged.
+
+⚠️ **The two resistors round in OPPOSITE directions**, and this is the step most often botched. Both round toward *safety*, but "safe" points different ways in the two loops:
+
+| Resistor | Direction | Failure it avoids |
+|---|---|---|
+| **R_B** (base) | **DOWN** | too little base current → falls out of saturation → transistor becomes a heater |
+| **R_C** (collector) | **UP** | too much current → cooked LED |
+
+Smaller resistor always means more current. You want *more* in the base loop and *less* in the collector loop. **R_C is not a new rule — it is Lab 3's LED resistor with V_CE(sat) subtracted.** Only R_B is new, and only R_B rounds down.
 
 **Worked — 3.3 V GPIO switching a red LED at 20 mA off a 5 V rail:**
 
@@ -303,9 +312,36 @@ For switching you want the transistor to be a **bit**, not a float — hard off 
 
 **The point of the whole exercise:** the GPIO supplies **2.17 mA** and the LED gets **18.7 mA**. An 8.6× gain — and for a relay or motor at 500 mA the ratio is the difference between "possible" and "destroyed pin." *That current ratio is the entire reason the transistor exists.*
 
+**The framing that makes the whole procedure make sense:** a transistor switch is **two separate loops that share the emitter.** A small base loop the GPIO can afford to drive, and a big collector loop that does the work. Each gets its own KVL, its own resistor, its own calculation. Steps 1–4 are the base loop; step 5 is the collector loop.
+
+Walk the collector loop as a voltage staircase and it stops being abstract — start at the rail and spend it down to ground:
+
+```
+5.0 V  rail
+ ↓ −2.8   R_C          ← the leftover; you choose this via Ohm's law
+2.2 V
+ ↓ −2.0   LED V_f      ← fixed by physics
+0.2 V  ← collector node
+ ↓ −0.2   V_CE(sat)    ← fixed by the part
+0.0 V  emitter / ground        2.8 + 2.0 + 0.2 = 5.0 ✓ KVL closes
+```
+
+Two of the three drops were decided before you started. **The resistor gets what's left** — same structure as the LED headroom lesson in §D.4.
+
+⚠️ **Read the conditions column, not just the value.** Every V_BE(sat), V_CE(sat), and β figure on a datasheet comes with an I_C and I_B attached, and the number is only valid near that operating point. A 2N2222-type sheet lists V_BE(sat) = 0.75 V **at I_C = 10 mA, I_B = 1 mA** — if that matches your design, use it instead of the generic 0.7 V.
+- **V_BE(sat) > V_BE(active)** for real: saturation forward-biases the B-C junction too, and larger base current produces ohmic drops in the internal base/emitter resistance.
+- But the high figures (0.85–1.2 V) are quoted at **high current** — 2N2222 hits ~1.2 V at I_C = 150 mA / I_B = 15 mA. At indicator-LED currents you're much closer to 0.7 V.
+- **Practical rule:** 0.7 V at indicator currents; 0.9–1.0 V when I_B reaches tens of mA (relays, motors).
+- ⚠️ Don't mix parts. Advice written for a 2N3904 does not transfer to a 2N2222. When sources disagree, **the datasheet for the part you're actually using wins.**
+
 ### E.4 Two circuit details that aren't optional
 
 - **Base pull-down (10 kΩ, base to ground).** During MCU reset and before GPIO configuration, the pin is a **floating input** — it doesn't drive low, it drives nothing, and a floating base picks up noise and can partially turn the transistor on. The pull-down defines the off state. ⚠️ **Every MCU-driven switch needs this.**
+  - **Placement:** from the **base node to ground** — the node where R_B meets the base, i.e. in parallel with the B-E junction. Not on the GPIO side of R_B.
+  - **It solves a state the circuit passes *through*, not one it sits in.** MCU pins default to high-impedance inputs at power-up. For those milliseconds the base is connected to something driving nothing; stray capacitance and noise drift it up, and past ~0.6 V the transistor starts conducting. Relay chatter or a motor twitch during the exact window nobody is in control.
+  - **It makes the base a three-branch node — Lab 1's divider node again.** With the GPIO high the base sits at ~0.7 V, so a 10 kΩ pull-down draws 0.7/10 k = **70 µA** to ground. KCL: current in through R_B = current into the base + current down the pull-down. Costs ~6 % of base drive, irrelevant when overdriven 10×.
+  - **Why 10 kΩ:** 1 kΩ holds harder against noise but steals 0.7 mA (over half the base current); 100 kΩ steals nothing but holds weakly. 10 kΩ is the standard compromise.
+  - **Grounds:** all ground symbols are one net (§G.4's net-label rule). Drop a fresh ground symbol under the pull-down rather than routing a wire back — that is exactly why schematics scatter ground symbols instead of crisscrossing the sheet.
 - **Low-side switching is the default for NPN.** Load goes between the supply and the **collector**; the **emitter goes to ground**. This works because V_BE is measured against the emitter, which is at a known 0 V.
   - ⚠️ Put the load *below the emitter* instead and it breaks: the emitter now floats up to the load voltage, so the base would need to be ~0.7 V above *that* — often above your supply rail. Worth building the broken version once in Falstad and watching the base drive collapse.
   - High-side switching needs a PNP, a P-channel MOSFET, or a gate driver. Week 9.
@@ -454,7 +490,7 @@ A schematic is a **graph**, not a picture. It says nothing about physical placem
 
 **D — LEDs.** R = (V_s − V_f)/I_f, where the numerator is what **the resistor** sees. Never forget: **V_f takes its cut first and the resistor gets the leftover**, so a small supply drop is a large current drop — and a 3.2 V blue LED on a 3.3 V rail is not a designable circuit.
 
-**E — Transistor as a switch.** Cutoff or saturation, never active. **I_B = I_C/10** (forced β), R_B = (V_GPIO − 0.7)/I_B, round **down**. Never forget: **don't design at β**, always add the base/gate pull-down, low-side is the default — and the whole point is the current ratio between what the pin supplies and what the load draws.
+**E — Transistor as a switch.** Two loops sharing the emitter. Cutoff or saturation, never active. **I_B = I_C/10** (forced β), R_B = (V_GPIO − V_BE)/I_B rounded **down**, R_C rounded **up**. Never forget: **don't design at β**, **the two resistors round opposite ways**, always add the base/gate pull-down, low-side is the default — and the whole point is the current ratio between what the pin supplies and what the load draws.
 
 **F — Regulators.** Linear/LDO burns (V_in − V_out)·I as heat with efficiency V_out/V_in; buck switches into an inductor at 85–95% and doesn't care about the ratio. Never forget: **a regulator is closed loop and a divider is open loop** — that feedback is the entire difference, and it's why dividers make references, not supplies.
 
@@ -481,6 +517,7 @@ Given: V_GPIO, V_supply, load (I_C and its own voltage drop)
 1. I_B  = I_C / 10                              forced β, not datasheet β
 2. R_B  = (V_GPIO − 0.7) / I_B                  → round DOWN to standard
 3. R_C  = (V_supply − V_load − 0.2) / I_C       → round UP to standard
+                                                (opposite of step 2 — see E.3)
 4. Pull-down 10 kΩ base→GND                     defines OFF while pin floats
 5. Power: R_B, R_C via I²R · transistor via V_CE(sat)·I_C
 6. If load is inductive → flyback diode across it, cathode to +V
@@ -548,8 +585,11 @@ GPIO: ~20 mA absolute max per pin, plus a total-across-all-pins budget — desig
 BJT SWITCH (NPN, low side)
 V_BE ≈ 0.7 V (B-E is a diode) · V_CE(sat) ≈ 0.1–0.3 V · cutoff / SATURATION only, never active
 I_B = I_C / 10                             forced β — do NOT design at datasheet β
-R_B = (V_GPIO − 0.7) / I_B                 → round DOWN (opposite of LED!)
-R_C = (V_supply − V_load − V_CE(sat)) / I_C → round UP
+R_B = (V_GPIO − V_BE) / I_B                → round DOWN (more base drive = safe)
+R_C = (V_supply − V_load − V_CE(sat)) / I_C → round UP (less LED current = safe)
+      ⚠ OPPOSITE directions. R_C is just the LED rule; only R_B is new.
+V_BE: 0.7 nominal · check the datasheet's CONDITIONS column (I_C, I_B) for a better figure
+      0.9–1.0 V once I_B reaches tens of mA
 P_transistor = V_CE × I_C                  saturated ≈ mW · half-on = heater
 Always: 10 kΩ base→GND pull-down · inductive load → flyback diode
 
@@ -614,28 +654,31 @@ Absolute Maximum Ratings = destruction limits; design to Recommended Operating C
 - [x] Pick R and C so τ is watchable (10 k + 100 µF → τ = 1 s); slow the Falstad sim speed down
 - [x] **Predict first:** write down the expected voltage at 1τ, 2τ, 3τ from the exponential
 - [x] Scope the capacitor, run, and check the three points against the prediction
-- [ ] **Scope the resistor too** — confirm the current is the mirror image, starting at V/R and decaying
+- [x] **Scope the resistor too** — confirm the current is the mirror image, starting at V/R and decaying
 - [ ] Verify §B.3 directly: at t=0 the cap acts as a short (full current, ~0 V across it); at t=∞ as an open (0 current, full V across it)
 - [ ] **Double R and halve C.** Predict, then confirm the curve is unchanged — τ is the only thing that matters
 - [ ] Note the peak currents in both versions and record how they differ even though τ didn't
-- [ ] Add a switch to discharge through the same resistor; confirm 36.8% / 13.5% / 5.0%
+- [x] Add a switch to discharge through the same resistor; confirm 36.8% / 13.5% / 5.0%
 
 ### Lab 3 — LED + resistor at 5 V and 3.3 V ⬜ TOMORROW
 
-- [ ] Size and build both: 5 V rail (330 Ω) and 3.3 V rail (150 Ω); predict currents first
-- [ ] **Take the 5 V-sized 330 Ω and move it to the 3.3 V rail.** Predict the current *before* running; confirm the drop is much larger than the supply's drop (§D.4)
-- [ ] Swap to a blue/white LED (V_f ≈ 3.2 V) on the 3.3 V rail; try to design a resistor and document why you can't
+- [x] Size and build both: 5 V rail (330 Ω) and 3.3 V rail (150 Ω); predict currents first
+- [x] **Take the 5 V-sized 330 Ω and move it to the 3.3 V rail.** Predict the current *before* running; confirm the drop is much larger than the supply's drop (§D.4)
+- [x] Swap to a blue/white LED (V_f ≈ 3.2 V) on the 3.3 V rail; try to design a resistor and document why you can't
 - [ ] Compute the resistor's dissipation at 10 mA, then at 200 mA, and note where the ¼ W line falls
 - [ ] Sweep V_f ±0.2 V (part tolerance) at fixed R on both rails; record how much the current moves in each case — this quantifies "headroom buys you insensitivity"
 
-### Lab 4 — NPN switching an LED from a "GPIO" ⬜ TOMORROW (most valuable — budget the time)
+### Lab 4 — NPN switching an LED from a "GPIO" ✅ CORE COMPLETE
 
-- [ ] Design in order: I_C → I_B = I_C/10 → R_B by KVL → R_C including V_CE(sat). Write the numbers down before building.
-- [ ] Build it: 3.3 V source as the "GPIO", NPN low-side, LED + R_C on the 5 V rail
-- [ ] **Compare the GPIO's current to the LED's current.** That ratio is the reason the transistor exists — record it.
+- [x] Design in order: I_C → I_B = I_C/10 → R_B by KVL → R_C including V_CE(sat). Write the numbers down before building.
+- [x] Build it: 3.3 V source as the "GPIO", NPN low-side, LED + R_C on the 5 V rail
+- [x] **Compare the GPIO's current to the LED's current.** That ratio is the reason the transistor exists — record it.
+- [x] Verify saturation: V_CE collapses from ~5 V (off) to a few hundred mV (on)
+- [x] Compute transistor dissipation P = V_CE × I_C
+- [x] Add the 10 kΩ base pull-down; understand placement (base node → ground) and the 70 µA cost
 - [ ] Add a slider to R_B (right-click → slider). Sweep upward: watch the LED dim and V_CE rise.
 - [ ] At a mid-sweep point compute **P = V_CE × I_C** and compare it to the saturated value — the half-on heater, in numbers
-- [ ] Set the GPIO source to 0 V; confirm cutoff. Then **remove** the source entirely to simulate a floating pin, observe, and add the 10 kΩ base pull-down to fix it
+- [ ] Remove the drive entirely to simulate a floating pin, observe, then confirm the pull-down fixes it
 - [ ] **Deliberately break it:** move the LED below the emitter (high-side attempt) and watch the base drive collapse. Document why low-side is the NPN default.
 - [ ] Stretch: rebuild with a logic-level MOSFET and compare gate current to base current
 
@@ -683,6 +726,69 @@ Absolute Maximum Ratings = destruction limits; design to Recommended Operating C
 
 ---
 
+## Lab log — NPN Switch (Lab 4)
+
+**Status:** core objective complete. Part: XN2222-type NPN (2N2222 family) in Falstad.
+
+**Design — deviated from §E.3's worked example on purpose, at a lower LED current:**
+
+- Target I_C = **10 mA** → I_B = I_C/10 = **1 mA**
+- R_C = (5 − 2.0 − 0.2)/0.010 = 280 Ω → **330 Ω** *(rounded **UP** — LED rule)* → predicted I_C = 2.8/330 = **8.5 mA**
+- R_B = (3.3 − 0.7)/0.001 = 2600 Ω → **2.2 kΩ** *(rounded **DOWN** — base rule)* → predicted I_B = 2.6/2200 = **1.18 mA**
+- Forced β = 8.5/1.18 = **7.2** — far below the datasheet's 100 min hFE, so solidly saturated ✓
+- Power: R_C ≈ 24 mW · R_B ≈ 3 mW · transistor ≈ 4.8 mW — all ≪ 250 mW ✓
+
+| Quantity | Predicted | Measured | Δ |
+|---|---|---|---|
+| I_B | 1.18 mA | 1.204 mA | +1.9 % |
+| I_C | 8.5 mA | 8.672 mA | +2.0 % |
+| V_CE (on) | 0.2 V | 0.549 V | sim artifact — see below |
+| V_CE (off) | ~5 V | 4.991 V | ✓ |
+| **Forced β (I_C/I_B)** | **7.2** | **7.2** | ✓ |
+
+**The result that is the lab:** the "GPIO" supplies **1.2 mA** while the LED draws **8.7 mA**. A **7×** current ratio. At a relay's 500 mA the same ratio is the difference between a working board and a destroyed pin.
+
+**Reconciling the 2 % gap — work backward from the measurement, don't guess:**
+
+- Voltage across R_B = 1.204 mA × 2200 = 2.649 V → so V_BE = 3.3 − 2.649 = **0.651 V**, not the assumed 0.700 V. That single assumption is the entire base-loop discrepancy.
+- Voltage across R_C = 8.672 mA × 330 = 2.862 V → leaves 5 − 2.862 − 0.549 = **1.589 V** for the LED, vs. the 2.0 V nominal. Same cause: V_f is exponential, so at lower current the drop is lower.
+- **Standard adopted: hand calculations use nominal constants (0.7 / 2.0 / 0.2 V) that are deliberately approximate. Agreement within ~5 % means the design is working.** Chase a discrepancy only when it's large enough to change a decision — and the method for chasing one is exactly the above: reverse the arithmetic to find which assumption was off.
+
+**⚠️ Simulator limits found (worth remembering — Falstad is not a datasheet):**
+
+- Measured V_CE(sat) = 0.549 V, but a real 2N2222 at 8.7 mA with 1.2 mA base drive lands near 0.1–0.2 V. Falstad's transistor model runs high.
+- Saturation test that still works regardless: **V_BE − V_CE = 0.651 − 0.549 = +0.102 V.** Positive ⇒ the base-collector junction is forward biased ⇒ saturated by definition. (Negative would mean active region.) Shallow, but on the right side of the line.
+- Falstad's model omits the internal base/emitter resistance that makes V_BE(sat) climb with current, so it will **never** show that effect no matter how hard the base is driven.
+
+**Mistakes logged:**
+
+1. ⚠️ **Base shorted to emitter.** A stray rectangular wire path ran from the base node down and back into the emitter, tying the base to ground through the emitter connection. Transistor stayed off with the logic input high.
+   - **How it was caught, without touching the schematic:** the scope on R_B read **Max = −3.3 V** — the *entire* input voltage dropping across the base resistor, which can only happen if its far end is at 0 V. Corroborated by V_CE = 4.991 V (nearly the whole rail across an off transistor) and by the collector-side readings of **3.36 nV** across R_C and **8.978 mV** across the LED — no current in the collector loop at all.
+   - **Pattern: when the transistor is off, the scope readings tell you *why* before the schematic does.** Full supply across the transistor + ~0 across everything else = no base drive. Then look for what's holding the base down.
+2. ⚠️ **Used V_BE(sat) = 0.85 V from a source written for a 2N3904.** The instinct was right — V_BE(sat) genuinely exceeds V_BE(active) — but the number came from the wrong operating point *and* the wrong part. 0.65–0.85 V is a **min-to-max spread across manufactured parts**, not a current-dependent slide; the genuinely current-dependent high figures (~1.2 V) are quoted at 150 mA.
+   - The part's own datasheet listed **V_BE(sat) = 0.75 V at I_C = 10 mA, I_B = 1 mA** — an exact match to this design, which almost never happens. Should have been used over the generic 0.7 V.
+   - Prediction accuracy: 0.85 V → 1.11 mA (7.5 % low) · 0.70 V → 1.18 mA (1.9 % low) · measured 1.204 mA.
+   - **The error was in the safe direction:** overestimating V_BE underestimates I_B, which picks a *smaller* R_B, which gives *more* base drive. For a switch, more drive is safe.
+   - **Standing rule: a datasheet number without its test conditions is meaningless.** Read the conditions column first.
+3. **Built with un-designed values before fixing them** (R_C = 1 kΩ, then 330 Ω; R_B = 2.2 kΩ) and spent time wondering why measurements didn't match a calculation done for different parts. **Verify the schematic matches the design sheet before debugging the physics.**
+4. **Logic Input sat at L (0 V)** while looking for a fault. The circuit was correct; the input was just low. Check the drive state before assuming a wiring bug.
+
+**Falstad notes for next time:**
+
+- "GPIO" is not a component. **Draw → Logic Gates, Input and Output → Add Logic Input**, then right-click → Edit to set the high voltage to 3.3 V (defaults to 5 V, which silently breaks the R_B math). Click it while running to toggle H/L.
+- Simpler alternative when the toggle isn't needed: a 1-terminal voltage source at 3.3 V straight into R_B. Always on, still gives the I_B vs. I_C reading.
+- Transistor orientation: verify with the §E.1 mnemonic — the arrow is on the **emitter** and points **out** for NPN.
+- All ground symbols are one net (§G.4). Drop a fresh ground under the pull-down instead of routing a wire back.
+
+**Conceptual gains:**
+
+- **A transistor switch is two loops sharing the emitter.** Base loop (small, from the GPIO) and collector loop (large, from the rail). Each gets its own KVL and its own resistor. This is what makes the five-step recipe feel inevitable rather than arbitrary.
+- **The base loop is an LED circuit in disguise.** R = (V_source − V_diode)/I_target either way — the B-E junction is a diode with a fixed-ish drop and the resistor absorbs the leftover. Same structure as §D.2.
+- **P = VI is the general form; P = I²R is the special case** that requires Ohm's law to hold. A saturated transistor holds a roughly fixed voltage rather than obeying Ohm's law, so its dissipation is V_CE × I_C.
+- **The cost of not saturating, in numbers:** at 8.7 mA, V_CE = 0.549 V → 4.8 mW; the same current half-on at V_CE = 2.5 V → 21.7 mW, **4.5×** the heat. Scaled to a relay at 500 mA: 100 mW saturated vs. **1.25 W** half-on. That is the entire argument for forced β.
+
+---
+
 ## Hooks to later weeks
 
 - τ = RC → **Week 3** button debounce (10 k + 100 nF ≈ 1 ms) and the hardware-vs-software debounce comparison
@@ -710,4 +816,9 @@ Absolute Maximum Ratings = destruction limits; design to Recommended Operating C
 - Unit-checking every intermediate → standing debugging habit, per the Lab 1 log; the cheapest error detector available
 - Deliberately non-colliding test values → standing debugging technique, from bench to firmware
 - Predicted/measured/delta tables → the standing lab format for the rest of the 26 weeks
+- ⚠️ Datasheet **conditions columns** (every V_BE(sat), V_CE(sat), β figure has an I_C/I_B attached) → standing datasheet-literacy habit, from Lab 4's 0.85 V error
+- ⚠️ Simulator models are not datasheets (Falstad's V_CE(sat) runs high, omits V_BE(sat) rise) → **Week 24** bring-up, where the real part disagrees with the sim
+- Reverse-the-arithmetic debugging (work backward from a measurement to find which assumption was off) → standing technique, from Lab 4's 2 % reconciliation
+- Scope readings diagnose *why* before the schematic does (full supply across an off transistor + ~0 elsewhere = no base drive) → standing bench technique
+- ~5 % agreement is success; nominal constants are approximations → standing standard for every lab from here
 - Thévenin intuition (short the source, look back) → **Vol. I Ch. 10** network theorems; the formal version of the Lab 1 output-resistance argument
