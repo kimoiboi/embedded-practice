@@ -1,6 +1,6 @@
 # Week 3 — Multimeter Fluency & Physical Builds
 
-**Status:** Sim pass — Build 1 complete; Builds 2–4 pending. Bench pass pending.
+**Status:** Sim pass — Build 1 complete, Build 2 partial. Builds 3–4 pending. Bench pass pending.
 **Simulator:** Tinkercad Circuits
 **Meter (bench):** AstroAI AM33D, 2000-count, manual range
 **Supply (bench):** HW-131 module — *faulty, replacement pending*
@@ -332,56 +332,190 @@ from a Vf quoted at 20 mA will give the wrong current if the target is 2 mA.
 
 ---
 
-## 5. Build 2 — 3.3 V divider, loaded vs. unloaded
+## 5. Build 2 — 3.3 V divider, loaded vs. unloaded ⚠️ SIM PASS PARTIAL
 
-**Circuit:** `+ rail → R1 (1 kΩ) → node → R2 (2 kΩ) → − rail`, measure at node.
-Load resistors go from the node to the − rail.
+**Circuit:** `+ rail → R1 (1 kΩ) → node → R2 (2 kΩ) → − rail`, Vout measured at the node.
+Load `RL` connects from the node to the − rail, **in parallel with R2**.
+**Simulated:** Tinkercad, ideal 5.00 V supply
+**Date:**
 
-### 5.1 Predictions
+### 5.1 Design and predictions
+
+The name refers to the **output**, not the input. Supply stays at 5.00 V; the
+resistor ratio produces 3.3 V at the node.
 
 ```
-Vs           = ______ V
-R1 measured  = ______ Ω
-R2 measured  = ______ Ω
+Need  R2/(R1+R2) = 3.3/5 = 0.66  →  R2 ≈ 2 × R1
+Chose R1 = 1 kΩ, R2 = 2 kΩ
 
-Vout(unloaded) = Vs × R2/(R1+R2)  = ______ V
-Vth            = Vout(unloaded)   = ______ V
-Rth            = R1 ∥ R2          = ______ Ω     (nominal: 667 Ω)
-
-For each load:  Vout = Vth × RL/(RL + Rth)
+Vout(unloaded) = 5 × 2000/3000        = 3.333 V
+Vth            = Vout(unloaded)       = 3.333 V
+Rth            = R1 ∥ R2 = 2e6/3000   = 666.7 Ω
+I(unloaded)    = 5/3000               = 1.667 mA
 ```
 
-### 5.2 Results
+**R1 and R2 are in SERIES.** That is what makes it a divider — one current path,
+so the two resistors split the supply by their ratio. Parallel only enters when
+`RL` is added, and then only between `R2` and `RL`.
 
-| Load | Predicted Vout | Sim | Bench | % err sim | % err bench |
+### 5.2 Predictions — both methods
+
+Method 1 collapses `R2 ∥ RL` and re-runs the divider formula. Method 2 uses the
+Thévenin form. They must agree; agreement is the arithmetic self-check.
+
+| RL | R2 ∥ RL | R_total | I | V across R1 | **Vout** (method 1) | **Vout** (method 2) |
+|---|---|---|---|---|---|---|
+| open | 2000 Ω | 3000 Ω | 1.667 mA | 1.667 V | **3.333 V** | 3.333 V |
+| 100 kΩ | 1960.8 Ω | 2960.8 Ω | 1.689 mA | 1.689 V | **3.311 V** | 3.311 V |
+| 10 kΩ | 1666.7 Ω | 2666.7 Ω | 1.875 mA | 1.875 V | **3.125 V** | 3.125 V |
+| 1 kΩ | 666.7 Ω | 1666.7 Ω | 3.000 mA | 3.000 V | **2.000 V** | 2.000 V |
+
+Both methods agree to four figures on every row. ✅
+
+### 5.3 Results
+
+| RL | Pred Vout | Sim Vout | Bench | Pred I | Sim I | % err sim |
+|---|---|---|---|---|---|---|
+| open | 3.333 V | | | 1.667 mA | | |
+| 100 kΩ | 3.311 V | *invalid — see 5.6* | | 1.689 mA | *invalid* | |
+| 10 kΩ | 3.125 V | **3.12 V** | | 1.875 mA | **1.87 mA** | ~0 % |
+| 1 kΩ | 2.000 V | | | 3.000 mA | | |
+
+**Supporting measurement, 10 kΩ run:** Vs = 4.99 V, V across R1 = 1.87 V,
+Vout = 3.12 V. KVL: `1.87 + 3.12 = 4.99` ✓ — sums to the *measured* supply, not
+to the nominal 5.00.
+
+> **Rows still to fill:** unloaded, 100 kΩ (re-run after the current-limit fix),
+> and 1 kΩ. The 10 kΩ row matched prediction to display resolution, so the method
+> is validated; the remaining rows are collection, not investigation.
+
+### 5.4 The finding — droop is governed by RL/Rth
+
+| RL | RL / Rth | Vout | Droop from unloaded |
+|---|---|---|---|
+| open | ∞ | 3.333 V | 0 % |
+| 100 kΩ | 150× | 3.311 V | **0.66 %** |
+| 10 kΩ | 15× | 3.125 V | **6.25 %** |
+| 1 kΩ | 1.5× | 2.000 V | **40.0 %** |
+
+Droop is exactly `Rth / (RL + Rth)` — one expression covering every row. This is
+why `Rth` is worth computing before any load exists: it is a property of the
+divider, not of the load, and it predicts the sag for any load in one step.
+
+**Rule of thumb:** the load must be roughly 10× `Rth` or larger to keep droop
+under ~10 %. A 1 kΩ load against a 667 Ω source resistance fails this badly and
+costs 40 % of the output.
+
+### 5.5 KCL at the node (1 kΩ load) `[to measure]`
+
+Build 1 was a single loop, so only KVL applied. This is the first node with three
+branches and the first place KCL can be demonstrated.
+
+| Branch | Direction | Predicted | Sim | Bench |
+|---|---|---|---|---|
+| Through R1 | in | 3.00 mA | | |
+| Through R2 | out | 1.00 mA | | |
+| Through RL | out | 2.00 mA | | |
+
+`1.00 + 2.00 = 3.00` — current in equals current out. RL is half the resistance of
+R2, so it takes twice the current at the same 2.00 V.
+
+Measure each branch **in series** — break the path and insert the meter — rather
+than computing `V/R`. Doing it three times is the point.
+
+### 5.6 Incident: supply entered constant-current mode
+
+**Symptom:** with the 100 kΩ load connected, supply read 4.94 V instead of 5.00 V
+and current sat pinned at 1.67 mA.
+
+**Cause:** the supply's *current limit* had been set to 0.00167 A — exactly the
+unloaded draw. Adding the load raised demand to 1.689 mA, exceeding the limit, so
+the supply reduced its output voltage until current fell back to the ceiling.
+This is **constant-current (CC) mode**, the normal behaviour of any bench supply,
+not a circuit fault and not a simulator quirk.
+
+**Fix:** raise the current limit well above expected draw (50–100 mA here). Worth
+noting the 1 kΩ run draws 3.00 mA — nearly double the original limit — so the
+fault would have recurred and corrupted that row too.
+
+**Why the limit exists:** on real hardware it is protection. Set just above
+expected draw, a wiring mistake causes the supply to drop voltage instead of
+dumping current into a short and destroying parts.
+
+**Data affected:** the 100 kΩ row was taken under CC and is invalid. Re-run.
+
+### 5.7 Power check
+
+| Condition | Resistor | P | % of ¼ W |
+|---|---|---|---|
+| Unloaded | R1 | 2.78 mW | 1.1 % |
+| Unloaded | R2 | 5.56 mW | 2.2 % |
+| 1 kΩ load | R1 | 9.00 mW | 3.6 % |
+| 1 kΩ load | R2 | 2.00 mW | 0.8 % |
+| 1 kΩ load | RL | 4.00 mW | 1.6 % |
+
+All negligible. This divider wastes almost no power — which, as 5.8 shows, is
+precisely why it cannot hold its voltage.
+
+### 5.8 The design tradeoff — what stiffness costs
+
+*Question posed in 5.4: what would Rth have to be for a 1 kΩ load to droop under 1 %?*
+
+```
+Rth/(1000 + Rth) < 0.01   →   Rth < 10.1 Ω
+
+Holding the 2:1 ratio:  Rth = 2·R1/3 = 10  →  R1 = 15 Ω, R2 = 30 Ω
+```
+
+| Design | Rth | Droop @ 1 kΩ | Standing current | P in R1 | P in R2 |
 |---|---|---|---|---|---|
-| None (open) | 3.333 V | | | | |
-| 100 kΩ | 3.311 V | | | | |
-| 10 kΩ | 3.125 V | | | | |
-| 1 kΩ | 2.000 V | | | | |
+| 1 kΩ / 2 kΩ | 667 Ω | 40 % | 1.67 mA | 2.8 mW | 5.6 mW |
+| 15 Ω / 30 Ω | 10 Ω | 0.99 % | **111 mA** | 185 mW | **370 mW** |
+| 10 Ω / 20 Ω | 6.7 Ω | 0.66 % | **167 mA** | 278 mW | **556 mW** |
 
-*Predicted values assume nominal 1 k / 2 k and Vs = 5.00. Recompute with your
-measured values.*
+**Both stiff designs exceed a ¼ W resistor rating on R2.** They also burn 111–167 mA
+continuously whether anything is connected or not — on a battery-powered device
+that is a flat battery in hours while doing nothing.
 
-**Conclusion to write out:** the 1 kΩ load pulls the output down by 1.33 V —
-40 % of the intended voltage. Explain in terms of Rth why a divider cannot be
-used as a power supply, and what Rth would have to be for the 1 kΩ load to be
-acceptable.
+**There is no setting that gives both.** Low Rth means a stiff output and wasted
+power; high Rth means efficient and useless under load. The ratio sets the
+voltage; the absolute values set the tradeoff. Two multiplications produce the
+entire argument.
 
-### 5.3 `[BENCH]` Meter loading experiment
+This is why voltage regulators exist: a regulator holds its output *actively*,
+correcting as the load changes, instead of passively splitting whatever is there.
+A divider's output is only as good as its assumption about the load, and a real
+load is not a fixed resistance — a sensor draws different current idle vs.
+transmitting, so its effective resistance moves and Vout wanders with it.
+
+### 5.9 `[BENCH]` Meter loading experiment
 
 **Cannot be done in Tinkercad** — the simulated voltmeter has infinite input
-impedance and will read the ideal value.
+impedance and will report the ideal value.
 
-Rebuild the same 1:2 ratio with **1 MΩ / 2 MΩ**. The AM33D's ~10 MΩ input now
-sits in parallel with the 2 MΩ leg and visibly drags the reading down.
+Rebuild the same 1:2 ratio with **1 MΩ / 2 MΩ**. The AM33D's ~10 MΩ input then
+sits in parallel with the 2 MΩ leg and visibly drags the reading down. Same
+`R2 ∥ RL` mathematics as this build, except the meter itself is the load.
 
-| Divider | Predicted (ideal) | Predicted (with 10 MΩ meter) | Sim | Bench |
-|---|---|---|---|---|
-| 1 kΩ / 2 kΩ | 3.333 V | | | |
-| 1 MΩ / 2 MΩ | 3.333 V | | | |
+| Divider | Predicted (ideal) | Predicted (with 10 MΩ meter) | Bench |
+|---|---|---|---|
+| 1 kΩ / 2 kΩ | 3.333 V | | |
+| 1 MΩ / 2 MΩ | 3.333 V | | |
 
-Prediction hint: `2 MΩ ∥ 10 MΩ = 1.667 MΩ`, so `Vout = 5 × 1.667/(1 + 1.667)`.
+Hint: `2 MΩ ∥ 10 MΩ = 1.667 MΩ`, so `Vout = 5 × 1.667/(1 + 1.667)`.
+
+### 5.10 Discussion
+
+*Fill after the remaining rows. Points to cover: predicted and measured agreed to
+display resolution on the 10 kΩ run, confirming the model; droop follows
+`Rth/(RL+Rth)` across three orders of magnitude of load; the divider fails not
+when idle but at the moment it is asked to do its job; and the stiffness/efficiency
+tradeoff has no resolution within the divider topology, which is the motivation
+for active regulation.*
+
+**Bench-pass note:** 2 kΩ is not a standard kit value. Use **two 1 kΩ resistors in
+series** for R2 — exact value, plus a free demonstration of series addition.
+Measure the pair end-to-end before wiring.
 
 ---
 
@@ -531,7 +665,7 @@ disagree, and was the disagreement explainable from a known physical effect?*
 | Build | Largest sim/bench gap | Cause | Explainable? |
 |---|---|---|---|
 | 1 | *pending bench pass* — sim showed 0.0 % vs corrected prediction; bench should not | Tolerance, meter burden, lead R | |
-| 2 | | | |
+| 2 | *pending* — CC-mode incident logged in 5.6 | Supply current limit, not circuit | Yes |
 | 3 | | | |
 | 4 | | | |
 
@@ -552,7 +686,8 @@ disagree, and was the disagreement explainable from a known physical effect?*
 ### 9.3 Carry-forward
 
 - [x] Build 1 sim pass complete
-- [ ] Builds 2–4 sim pass
+- [ ] Build 2: re-run 100 kΩ row after CC fix; collect unloaded + 1 kΩ + KCL
+- [ ] Builds 3–4 sim pass
 - [ ] Replacement power supply sourced
 - [ ] Bench pass completed for all four builds
 - [ ] MIX soldering/electronics workshop (unlocks scope + function generator)
