@@ -1,6 +1,6 @@
 # Week 3 — Multimeter Fluency & Physical Builds
 
-**Status:** Sim pass — Build 1 complete, Build 2 partial. Builds 3–4 pending. Bench pass pending.
+**Status:** Sim pass — Build 1 complete; Builds 2–3 partial; Build 4 pending. Bench pass pending.
 **Simulator:** Tinkercad Circuits
 **Meter (bench):** AstroAI AM33D, 2000-count, manual range
 **Supply (bench):** HW-131 module — *faulty, replacement pending*
@@ -519,64 +519,188 @@ Measure the pair end-to-end before wiring.
 
 ---
 
-## 6. Build 3 — Button + pull resistor (GPIO input before there's a GPIO)
+## 6. Build 3 — Button + pull resistor ⚠️ SIM PASS PARTIAL
 
-### 6.1 Pull-down
+**Concept:** the same divider as Build 2, with one of the two resistances switching
+between the extremes. A button is 0 Ω closed and ∞ Ω open, so
+`Vout = Vs × R_bottom/(R_top + R_bottom)` collapses to two discrete outputs
+instead of a continuous one. This is a GPIO input built by hand.
 
-**Circuit:** `+ rail → button → node → 10 kΩ → − rail`. Measure node to − rail.
+**Simulated:** Tinkercad, ideal 5.00 V supply, 10 kΩ pull resistor
+**Date:**
 
-| Button state | Predicted | Sim | Bench |
+### 6.1 Predictions — node voltage
+
+**Pull-down** — button on top, 10 kΩ on the bottom:
+
+```
+Open   (button = ∞):  Vout = 5 × 10000/(∞ + 10000)  = 0 V
+Pressed (button = 0):  Vout = 5 × 10000/(0 + 10000)  = 5 V
+```
+
+**Pull-up** — 10 kΩ on top, button on the bottom:
+
+```
+Open   (button = ∞):  Vout = 5 × ∞/(10000 + ∞)      = 5 V
+Pressed (button = 0):  Vout = 5 × 0/(10000 + 0)      = 0 V
+```
+
+Reasoning without the infinities: **infinite resistance is a gap**, so no current
+flows, so no drop across the 10 kΩ (`V = IR` with `I = 0`) — the node sits at
+whatever the resistor ties it to. **Zero resistance is a wire**, so the node *is*
+the rail it connects to.
+
+### 6.2 Predictions — current through the pull resistor
+
+The current is set by the voltage **across the resistor**, not by the node voltage
+in isolation. Both ends of the resistor matter.
+
+**Pull-down** (resistor between node and GND):
+
+| State | Node | V across R | I |
 |---|---|---|---|
-| Open | 0 V | | | 
-| Pressed | 5 V | | |
+| Open | 0 V | 0 − 0 = 0 V | **0 mA** |
+| Pressed | 5 V | 5 − 0 = 5 V | **0.5 mA** |
 
-### 6.2 Pull-up
+**Pull-up** (resistor between 5 V rail and node):
 
-**Circuit:** `+ rail → 10 kΩ → node → button → − rail`. Measure node to − rail.
-
-| Button state | Predicted | Sim | Bench |
+| State | Node | V across R | I |
 |---|---|---|---|
-| Open | 5 V | | |
-| Pressed | 0 V | | |
+| Open | 5 V | 5 − 5 = 0 V | **0 mA** |
+| Pressed | 0 V | 5 − 0 = 5 V | **0.5 mA** |
 
-**Write out:** why the logic inverts, and which configuration is more common on
-real microcontrollers (and why — think about internal pull-ups and noise immunity).
+> **Correction to first-pass work:** the pull-up currents were initially written
+> inverted (0.5 mA open, 0 mA pressed). The trap is reading the node voltage as
+> the voltage across the resistor. In pull-up **open**, the node is at 5 V *and so
+> is the top of the resistor* — both ends at the same potential, zero volts across
+> it, zero current. In pull-up **pressed**, the button ties the node to ground and
+> the full 5 V lands across the resistor.
+>
+> **The rule that prevents this: current needs a complete path.** In either
+> configuration, the path only closes when the button is pressed. Node voltage
+> inverts between the two configurations; current does not.
 
-### 6.3 Current through the pull resistor
+**Both configurations draw current only when pressed.** This is not a difference
+between them — it is the same 0.5 mA either way.
 
-| Config | State | Predicted I | Sim | Bench |
-|---|---|---|---|---|
-| Pull-down | Pressed | 0.5 mA | | |
-| Pull-down | Open | 0 mA | | |
-| Pull-up | Pressed | 0.5 mA | | |
-| Pull-up | Open | 0 mA | | |
+### 6.3 Results
 
-Note which state burns current. This matters for battery-powered designs.
+| Config | State | Pred Vout | Sim Vout | Bench | Pred I | Sim I | Bench I |
+|---|---|---|---|---|---|---|---|
+| Pull-down | Open | 0 V | | | 0 mA | | |
+| Pull-down | Pressed | 5 V | | | 0.5 mA | | |
+| Pull-up | Open | 5 V | | | 0 mA | | |
+| Pull-up | Pressed | 0 V | | | 0.5 mA | | |
 
-### 6.4 `[BENCH]` Floating input
+**Circuits built** (Tinkercad, three layouts):
+1. Standalone pull-down — power supply, 10 kΩ, button, multimeter at the node
+2. Standalone pull-up — same parts, resistor and button swapped
+3. Arduino Uno with both configurations on one breadboard, feeding two digital pins
 
-**Cannot be done meaningfully in Tinkercad** — an unconnected node in the
-simulator is not physical and won't drift.
+Readings still to be recorded. The button can be clicked while the sim runs, so
+each row is a live toggle rather than a rebuild.
 
-Remove the pull resistor entirely. Measure the node.
+**Wiring note — the button trap:** Tinkercad's pushbutton has four terminals with
+1a/1b internally connected and 2a/2b internally connected. Wrong orientation makes
+a permanent short and the node never changes state. If pressing does nothing,
+rotate the button 90°. Real 4-pin tactile switches behave identically — this is
+the fault continuity checking is for (section 8).
+
+### 6.4 Why the logic inverts
+
+Pull-down: the resistor holds the node **low** by default; the button connects it
+**high**. Pull-up: the resistor holds it **high**; the button pulls it **low**.
+
+The pull resistor defines the *idle* state; the button defines the *active* state.
+Whichever rail the resistor ties to is what the node reads when nothing is happening.
+
+**Consequence in firmware:** with a pull-up, pressed reads LOW. This is why
+`if (digitalRead(pin) == LOW)` usually means "pressed" — and why forgetting it
+produces logic that behaves exactly backwards.
+
+**Pull-up dominates in practice** for two reasons, neither of which is power (both
+configurations draw the same 0.5 mA when pressed):
+
+1. **Microcontrollers have internal pull-ups but rarely internal pull-downs.**
+   `pinMode(pin, INPUT_PULLUP)` enables a built-in resistor of roughly 20–50 kΩ,
+   eliminating the external part entirely. Build 3 is that resistor, in discrete form.
+2. **Noise immunity and shared ground.** Switch wiring commonly runs to ground,
+   and a low-side switch keeps the switched conductor near ground potential rather
+   than carrying the supply rail out to the button.
+
+### 6.5 Pull resistor value — the tradeoff
+
+| R | I when pressed | P when pressed | τ with ~10 pF stray |
+|---|---|---|---|
+| 1 kΩ | 5.000 mA | 25.0 mW | 0.01 µs |
+| **10 kΩ** | **0.500 mA** | **2.5 mW** | **0.1 µs** |
+| 100 kΩ | 0.050 mA | 0.25 mW | 1 µs |
+| 1 MΩ | 0.005 mA | 0.025 mW | 10 µs |
+
+**Too small** and a held button wastes real current — 5 mA continuously at 1 kΩ is
+significant drain on a battery device. **Too large** and the node becomes a
+high-impedance point: slow to settle against stray capacitance and easily disturbed
+by coupled noise, which is the floating-input failure mode in milder form.
+
+10 kΩ sits in the middle and is the near-universal default. At 2.5 mW it is 1 % of
+a ¼ W part — power is never the limiting factor here, current draw and noise are.
+
+### 6.6 `[BENCH]` Floating input
+
+**Cannot be demonstrated in Tinkercad** — an unconnected node in a simulator is a
+mathematically undefined value, not a physical antenna. Record what the sim claims
+and flag the row.
+
+Remove the pull resistor entirely, leaving the button and a bare node.
 
 - Reading, undisturbed: `______`
 - Reading, finger near the wire: `______`
 - Reading, finger touching the wire: `______`
 
-Then wire the node to a digital input pin, `digitalRead()` in a tight loop, and
-print. Compare a floating pin to a pulled one.
+Then wire the node to a digital input, `digitalRead()` in a tight loop, and count
+transitions. Compare against a pulled pin.
 
 - Floating pin, transitions per second: `______`
 - Pulled pin, transitions per second: `______`
 
-**This is the entire justification for pull resistors, in one measurement.**
+**This is the justification for the entire build.** Without a pull resistor,
+"not pressed" has no defined electrical meaning — the node drifts, picks up mains
+hum, and responds to a nearby hand. It answers the obvious question: *why can't I
+just wire a button straight to the pin?*
 
-### 6.5 `[BENCH]` Switch bounce — deferred
+### 6.7 Arduino verification `[to record]`
 
-Not visible on a DMM and not modeled in Tinkercad. Note as a known unknown.
-Revisit with a scope (MIX makerspace) or by counting transitions in a tight
-polling loop with `micros()` timestamps.
+The third Tinkercad layout feeds both configurations into digital pins.
+
+| Config | Button | Meter reads | digitalRead() | Match? |
+|---|---|---|---|---|
+| Pull-down | Open | | | |
+| Pull-down | Pressed | | | |
+| Pull-up | Open | | | |
+| Pull-up | Pressed | | | |
+
+Then replace the external pull-up with `pinMode(pin, INPUT_PULLUP)`, remove the
+physical resistor, and confirm identical behaviour. That substitution is the whole
+point of the build: the internal pull-up is roughly 20–50 kΩ rather than 10 kΩ, so
+the node is higher-impedance but functionally the same circuit.
+
+### 6.8 `[BENCH]` Switch bounce — deferred
+
+Not visible on a DMM and not modelled in Tinkercad. Mechanical contacts chatter for
+1–10 ms on each transition, so a single press can register as several. Note as a
+known unknown.
+
+Revisit with a scope (MIX makerspace) or by counting transitions in a tight polling
+loop with `micros()` timestamps.
+
+### 6.9 Discussion
+
+*Fill after recording. Points to cover: the divider formula covers this build with
+no new theory, using only extreme resistance values; node voltage inverts between
+the two configurations but current does not, because current requires a complete
+path in either case; the pull resistor defines the idle state and the button
+defines the active one; and the value choice trades standing current against node
+impedance rather than power dissipation.*
 
 ---
 
@@ -666,7 +790,7 @@ disagree, and was the disagreement explainable from a known physical effect?*
 |---|---|---|---|
 | 1 | *pending bench pass* — sim showed 0.0 % vs corrected prediction; bench should not | Tolerance, meter burden, lead R | |
 | 2 | *pending* — CC-mode incident logged in 5.6 | Supply current limit, not circuit | Yes |
-| 3 | | | |
+| 3 | *pending* | | |
 | 4 | | | |
 
 ### 9.2 Reporting discipline notes
@@ -687,7 +811,8 @@ disagree, and was the disagreement explainable from a known physical effect?*
 
 - [x] Build 1 sim pass complete
 - [ ] Build 2: re-run 100 kΩ row after CC fix; collect unloaded + 1 kΩ + KCL
-- [ ] Builds 3–4 sim pass
+- [ ] Build 3: record all four Vout/I readings + Arduino digitalRead table
+- [ ] Build 4 sim pass
 - [ ] Replacement power supply sourced
 - [ ] Bench pass completed for all four builds
 - [ ] MIX soldering/electronics workshop (unlocks scope + function generator)
