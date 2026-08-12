@@ -587,10 +587,10 @@ between them — it is the same 0.5 mA either way.
 
 | Config | State | Pred Vout | Sim Vout | Bench | Pred I | Sim I | Bench I |
 |---|---|---|---|---|---|---|---|
-| Pull-down | Open | 0 V | | | 0 mA | | |
-| Pull-down | Pressed | 5 V | | | 0.5 mA | | |
-| Pull-up | Open | 5 V | | | 0 mA | | |
-| Pull-up | Pressed | 0 V | | | 0.5 mA | | |
+| Pull-down | Open | 0 V | 0 V | | 0 mA | 0 mA | |
+| Pull-down | Pressed | 5 V | 5 V | | 0.5 mA | 0.5 mA | |
+| Pull-up | Open | 5 V | 5 V | | 0 mA | 0 mA | |
+| Pull-up | Pressed | 0 V | 0 V | | 0.5 mA | 0.5 mA | |
 
 **Circuits built** (Tinkercad, three layouts):
 1. Standalone pull-down — power supply, 10 kΩ, button, multimeter at the node
