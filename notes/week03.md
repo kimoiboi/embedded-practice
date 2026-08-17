@@ -712,10 +712,10 @@ impedance rather than power dissipation.*
 
 | Measurement | Predicted | Sim | Bench |
 |---|---|---|---|
-| End-to-end resistance | 10 kΩ | | |
-| Wiper-to-A at midpoint | 5 kΩ | | |
-| Wiper-to-B at midpoint | 5 kΩ | | |
-| Sum of the two | 10 kΩ | | |
+| End-to-end resistance | 10 kΩ | 10 kΩ | |
+| Wiper-to-A at midpoint | 5 kΩ | 5 kΩ | |
+| Wiper-to-B at midpoint | 5 kΩ | 5 kΩ | |
+| Sum of the two | 10 kΩ | 10 kΩ | |
 
 *Pots are commonly ±20 %. A "10 k" pot reading 9.1 k is normal, not a fault.*
 
@@ -723,11 +723,11 @@ impedance rather than power dissipation.*
 
 | Position | Predicted Vout | Sim | Bench |
 |---|---|---|---|
-| 0 % | 0.00 V | | |
-| 25 % | 1.25 V | | |
-| 50 % | 2.50 V | | |
-| 75 % | 3.75 V | | |
-| 100 % | 5.00 V | | |
+| 0 % | 0.00 V | 0.00 V | |
+| 25 % | 1.25 V | 1.3 V @ 26% Dial Position| |
+| 50 % | 2.50 V | 2.50 V | |
+| 75 % | 3.75 V | 3.80 V | |
+| 100 % | 5.00 V | 5.00 V | |
 
 ### 7.3 Loaded sweep (1 kΩ from wiper to − rail)
 
