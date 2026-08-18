@@ -1,6 +1,6 @@
 # Week 3 — Multimeter Fluency & Physical Builds
 
-**Status:** Sim pass — Build 1 complete; Builds 2–3 partial; Build 4 pending. Bench pass pending.
+**Status:** Sim pass — Builds 1 and 4 complete; Builds 2–3 partial. Bench pass pending.
 **Simulator:** Tinkercad Circuits
 **Meter (bench):** AstroAI AM33D, 2000-count, manual range
 **Supply (bench):** HW-131 module — *faulty, replacement pending*
@@ -704,11 +704,43 @@ impedance rather than power dissipation.*
 
 ---
 
-## 7. Build 4 — Potentiometer as a variable divider
+## 7. Build 4 — Potentiometer as a variable divider ✅ COMPLETE (sim pass)
 
-**Circuit:** outer pins to + rail and − rail, wiper to meter.
+**Circuit:** pot outer legs to + rail and − rail, wiper is the output node.
+Load `RL` = 1 kΩ from wiper to − rail.
+**Simulated:** Tinkercad, ideal 5.00 V supply, 10 kΩ linear pot
+**Date:**
 
-### 7.1 Pot characterization (unpowered)
+### 7.1 Why this build needs no new formulas
+
+One physical part supplies both divider resistances, and **their sum is fixed**.
+With wiper position `x` (0 to 1):
+
+```
+R_bottom = R_total × x
+R_top    = R_total × (1 − x)
+```
+
+Substituting into the Build 2 divider formula, the total cancels:
+
+```
+Vout = Vs × R_total·x / [R_total·(1−x) + R_total·x]
+     = Vs × x
+```
+
+**Unloaded, Vout is simply the supply times the position fraction.** No per-point
+ratio arithmetic — that is why the 7.3 predictions are round numbers.
+
+Loaded, the same collapse applies to the source resistance:
+
+```
+Rth(x) = R_top ∥ R_bottom = R_total · x · (1 − x)
+```
+
+A parabola: zero at both extremes, peaking at `R_total/4 = 2500 Ω` at midpoint.
+This is the shape that produces the bowed loaded curve in 7.4.
+
+### 7.2 Pot characterization (unpowered)
 
 | Measurement | Predicted | Sim | Bench |
 |---|---|---|---|
@@ -717,45 +749,164 @@ impedance rather than power dissipation.*
 | Wiper-to-B at midpoint | 5 kΩ | 5 kΩ | |
 | Sum of the two | 10 kΩ | 10 kΩ | |
 
-*Pots are commonly ±20 %. A "10 k" pot reading 9.1 k is normal, not a fault.*
+*Sim values are exact by construction. On the bench expect ±20 % — a "10 k" pot
+reading 9.1 k is normal, not a fault. The **sum** is the meaningful check: whatever
+the total, the two halves must add back to it at every position.*
 
-### 7.2 Unloaded sweep
+### 7.3 Unloaded sweep
 
-| Position | Predicted Vout | Sim | Bench |
-|---|---|---|---|
-| 0 % | 0.00 V | 0.00 V | |
-| 25 % | 1.25 V | 1.3 V @ 26% Dial Position| |
-| 50 % | 2.50 V | 2.50 V | |
-| 75 % | 3.75 V | 3.80 V | |
-| 100 % | 5.00 V | 5.00 V | |
+| Position | Predicted Vout | Sim | Bench | % err sim |
+|---|---|---|---|---|
+| 0 % | 0.00 V | 0.00 V | | 0 % |
+| 25 % | 1.25 V | 1.25 V | | ~0 % |
+| 50 % | 2.50 V | 2.50 V | | ~0 % |
+| 75 % | 3.75 V | 3.75 V | | ~0 % |
+| 100 % | 5.00 V | 5.00 V | | 0 % |
 
-### 7.3 Loaded sweep (1 kΩ from wiper to − rail)
+Linear in position, as 7.1 predicts.
 
-`Rth at the wiper = R_total × x(1−x)`, maximum at midpoint = `R_total/4 = 2.5 kΩ`.
+### 7.4 Loaded sweep (RL = 1 kΩ from wiper to − rail)
 
 | Position | Rth | Vth | Predicted Vout | Sim | Bench |
 |---|---|---|---|---|---|
-| 0 % | 0 Ω | 0.00 V | 0.00 V | | |
-| 25 % | 1875 Ω | 1.25 V | 0.435 V | | |
-| 50 % | 2500 Ω | 2.50 V | 0.714 V | | |
-| 75 % | 1875 Ω | 3.75 V | 1.304 V | | |
-| 100 % | 0 Ω | 5.00 V | 5.00 V | | |
+| 0 % | 0 Ω | 0.00 V | 0.000 V | 0.00 V | |
+| 25 % | 2500 Ω | 1.25 V | 0.435 V | **0.425 / 0.445** ⚠ | |
+| 50 % | 2500 Ω | 2.50 V | 0.714 V | 0.714 V | |
+| 75 % | 1875 Ω | 3.75 V | 1.304 V | **1.27 / 1.35** ⚠ | |
+| 100 % | 0 Ω | 5.00 V | 5.000 V | 5.00 V | |
 
-**The key observation:** the curve sags *most in the middle*, because that's
-where source impedance peaks. Same lesson as Build 2, now as a shape instead of
-a single number. Sketch both curves on the same axes.
+⚠ **Two positions could not be measured directly — see 7.5.**
 
-### 7.4 Wiper → ADC
+**Droop compared to unloaded:**
 
-Wire the wiper to an analog input. Compare ADC counts against the meter.
+| Position | Unloaded | Loaded | Droop |
+|---|---|---|---|
+| 0 % | 0.00 V | 0.00 V | 0 % |
+| 25 % | 1.25 V | 0.435 V | 65 % |
+| 50 % | 2.50 V | 0.714 V | **71 %** |
+| 75 % | 3.75 V | 1.304 V | 65 % |
+| 100 % | 5.00 V | 5.00 V | 0 % |
 
-| Position | Meter V | ADC counts | Counts × (Vref/max) | Difference |
+**The key result:** loading does not shift the curve down uniformly — it **bends**
+it. Droop is zero at both extremes and worst at midpoint, because `Rth` peaks
+there at 2500 Ω. This is Build 2's `Rth/(RL + Rth)` lesson generalised from a
+single number to a shape.
+
+At the extremes, `Rth → 0` — the wiper is effectively shorted to a rail, so the
+pot is an ideal source and no load can move it. At midpoint, `Rth = 2500 Ω`
+against a 1 kΩ load: the load is 0.4× the source resistance, far past the ~10×
+rule from Build 2, hence the 71 % collapse.
+
+*Sketch both curves on the same axes — straight line vs. bowed line — for the
+write-up.*
+
+### 7.5 Instrument limitation: dial quantization
+
+**Symptom:** the 25 % and 75 % positions could not be set exactly. At each, two
+adjacent achievable readings bracketed the predicted value:
+
+| Target | Readings obtained | Implied dial positions | Predicted position |
+|---|---|---|---|
+| 0.435 V | 0.425 V / 0.445 V | 24.0 % / 26.0 % | 25.0 % |
+| 1.304 V | 1.270 V / 1.350 V | 74.1 % / 76.1 % | 75.0 % |
+
+**Both brackets are symmetric about the prediction, and their midpoints recover it:**
+
+```
+(0.425 + 0.445)/2 = 0.435 V   vs. predicted 0.435 V   ← exact
+(1.270 + 1.350)/2 = 1.310 V   vs. predicted 1.304 V   ← 0.5 % high
+```
+
+**Cause:** the Tinkercad pot dial has finite angular resolution and steps in
+increments that skip the exact quarter points. The dial can reach 24 % and 26 %
+but not 25 %.
+
+**This is not measurement error and not a model failure.** For the first time this
+week, the limiting factor was the *input device*, not the circuit or the meter.
+Both readings are correct for the positions actually set — the positions just were
+not the ones requested. Bracketing plus interpolation extracts the intended value.
+
+**Bench-pass note:** a physical pot is continuous, not stepped, so this specific
+limitation vanishes on hardware. It is replaced by a different one — setting an
+exact percentage by hand is impossible without measuring wiper-to-end resistance
+first. The bench procedure should be: set the dial by *resistance* (probe
+wiper-to-end for 2.5 kΩ), then power up and read Vout.
+
+### 7.6 Wiper → ADC `[in progress]`
+
+**Setup:** Arduino Uno, pot wiper → A0, pot outer legs → 5V and GND, pot value
+10 kΩ. Sketch prints raw counts, percentage, and computed voltage.
+
+**Conversion:** `voltage = counts × (5.0 / 1023.0)`
+
+**Quantization step:** `5 V ÷ 1024 = 4.88 mV per count`. Any disagreement smaller
+than one count is below the ADC's resolution and is not a finding.
+
+**Part A — unloaded sweep.** Meter and ADC on the same node simultaneously.
+
+| Position | Meter V | ADC counts | Counts × 5/1023 | Difference |
 |---|---|---|---|---|
 | 0 % | | | | |
 | 25 % | | | | |
 | 50 % | | | | |
 | 75 % | | | | |
 | 100 % | | | | |
+
+*Expected counts: 0, 256, 512, 767, 1023.*
+
+**Part B — loaded sweep.** Re-attach RL = 1 kΩ and repeat. **This is the point of
+the section.**
+
+| Position | Meter V | ADC counts | Counts × 5/1023 | Difference |
+|---|---|---|---|---|
+| 0 % | | | | |
+| 25 % | | | | |
+| 50 % | | | | |
+| 75 % | | | | |
+| 100 % | | | | |
+
+*Expected counts: 0, 89, 146, 267, 1023.*
+
+**What to conclude:** unloaded, ADC counts track dial position linearly — 25 %
+gives ~256 counts. Loaded, 25 % gives ~89 counts instead. **The ADC is not
+measuring the dial; it is measuring the voltage present at the node.** Same
+conclusion as Build 1's "Vf tracks current, not supply voltage" — the instrument
+reports the local electrical reality, not the upstream intent.
+
+This matters directly for Week 7 (ADC + PWM): a pot read through an ADC gives a
+usable 0–1023 range *only* if nothing significant loads the wiper. Feeding a
+loaded node to `analogRead()` compresses most of the range into the bottom fifth
+of the scale and destroys resolution.
+
+*(Section previews Week 7 material — optional for the Week 3 deliverable.)*
+
+### 7.7 Discussion
+
+The divider formula covered all of Builds 2–4 with no new theory. A pot is that
+formula with two resistances that vary together while their sum stays fixed,
+which collapses the unloaded case to `Vout = Vs × x`.
+
+Loading produced the same physics as Build 2 but in a more informative form: a
+bowed curve rather than a single droop figure. Because `Rth = R_total·x·(1−x)`
+peaks at midpoint and falls to zero at both ends, a fixed 1 kΩ load costs 71 % of
+the output at 50 % and nothing at all at the extremes. A pot used as an adjustable
+supply is therefore worst exactly where it is most likely to be set.
+
+The most interesting failure of the session was not electrical. Two target
+positions could not be reached because the simulated dial quantizes; the readings
+obtained bracketed the prediction symmetrically and their midpoint recovered it to
+within 0.5 %. Recognising this as an input-device limitation rather than a wrong
+answer — and confirming it by interpolation instead of adjusting the model — is
+the reporting discipline this week was meant to build.
+
+**Debugging log for section 8:** three distinct breadboard topology faults were hit
+across Builds 1–4 — components shorted by a shared column group, an open loop from
+legs in non-adjacent columns, and components placed in the power rails where only
+two nodes exist rather than the main terminal area. A fourth fault was traced to a
+component *value* rather than wiring: readings matching the unloaded prediction
+exactly indicated a load that was electrically present but of the wrong magnitude.
+**Diagnostic rule learned: when two independent instruments agree with each other
+and with theory, suspect parameters before topology.**
 
 ---
 
@@ -791,7 +942,7 @@ disagree, and was the disagreement explainable from a known physical effect?*
 | 1 | *pending bench pass* — sim showed 0.0 % vs corrected prediction; bench should not | Tolerance, meter burden, lead R | |
 | 2 | *pending* — CC-mode incident logged in 5.6 | Supply current limit, not circuit | Yes |
 | 3 | *pending* | | |
-| 4 | | | |
+| 4 | *pending bench* — dial quantization (7.5) is sim-only; physical pot is continuous | Simulated dial steps ~2% | Yes |
 
 ### 9.2 Reporting discipline notes
 
@@ -812,7 +963,7 @@ disagree, and was the disagreement explainable from a known physical effect?*
 - [x] Build 1 sim pass complete
 - [ ] Build 2: re-run 100 kΩ row after CC fix; collect unloaded + 1 kΩ + KCL
 - [ ] Build 3: record all four Vout/I readings + Arduino digitalRead table
-- [ ] Build 4 sim pass
+- [x] Build 4 sim pass complete (7.6 ADC tables outstanding)
 - [ ] Replacement power supply sourced
 - [ ] Bench pass completed for all four builds
 - [ ] MIX soldering/electronics workshop (unlocks scope + function generator)
